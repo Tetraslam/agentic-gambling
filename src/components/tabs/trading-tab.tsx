@@ -25,7 +25,7 @@ interface AlpacaAccount {
 }
 
 export default function TradingTab() {
-  const { watchlist } = useTradingStore();
+  const { watchlist, currentSymbol } = useTradingStore();
   const [portfolio, setPortfolio] = useState<AlpacaPosition[]>([]);
   const [account, setAccount] = useState<AlpacaAccount | null>(null);
   const [pendingOrders, setPendingOrders] = useState<any[]>([]);
@@ -106,9 +106,9 @@ export default function TradingTab() {
           </div>
           <div className="h-full bg-muted/20 rounded">
             <iframe
-              src="https://s.tradingview.com/widgetembed/?frameElementId=tradingview_76d87&symbol=NASDAQ:AAPL&interval=D&hidesidetoolbar=1&saveimage=0&toolbarbg=f1f3f6&trendlines=0&studies=[]&theme=dark&style=1&timezone=Etc%2FUTC&hideideas=1&hidevolume=1&withdateranges=1&scaleposition=no&details=1&calendar=0&hotlist=1"
+              src={`https://s.tradingview.com/widgetembed/?frameElementId=tradingview_76d87&symbol=NASDAQ:${currentSymbol}&interval=D&hidesidetoolbar=1&saveimage=0&toolbarbg=f1f3f6&trendlines=0&studies=[]&theme=dark&style=1&timezone=Etc%2FUTC&hideideas=1&hidevolume=1&withdateranges=1&scaleposition=no&details=1&calendar=0&hotlist=1`}
               className="w-full h-full rounded"
-              title="TradingView Chart"
+              title={`TradingView Chart - ${currentSymbol}`}
             />
           </div>
         </div>

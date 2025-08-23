@@ -9,6 +9,7 @@ import { TrendingUp, Send } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation } from 'convex/react';
 import { api } from '../../../convex/_generated/api';
+import { useTradingStore } from '@/lib/stores/trading-store';
 
 interface Message {
   id: string;
@@ -21,6 +22,7 @@ export default function TradingAgent() {
   // Load messages from Convex
   const convexMessages = useQuery(api.trading.getMessages) || [];
   const addMessage = useMutation(api.trading.addMessage);
+  const { setCurrentSymbol } = useTradingStore();
   
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
