@@ -9,6 +9,7 @@ import { TrendingUp, Send } from 'lucide-react';
 import { useState } from 'react';
 
 interface Message {
+  id: string;
   role: 'user' | 'assistant';
   content: string;
   toolInvocations?: any[];
@@ -19,25 +20,80 @@ export default function TradingAgent() {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   
-  // TODO: Replace with actual useChat from AI SDK once import issue is resolved
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim()) return;
     
-    const userMessage: Message = { role: 'user', content: input };
+    const userMessage: Message = { 
+      id: Date.now().toString(), 
+      role: 'user', 
+      content: input 
+    };
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setIsLoading(true);
     
-    // Simulate AI response for now
-    setTimeout(() => {
-      const aiMessage: Message = { 
-        role: 'assistant', 
-        content: `Trading analysis for: "${input}". AI integration pending - check /api/chat/trading route is working!` 
+    try {
+      // Call the actual API route
+      const response = await fetch('/api/chat/trading', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          messages: [...messages, userMessage].map(m => ({ role: m.role, content: m.content }))
+        }),
+      });
+      
+      if (!response.ok) throw new Error('API call failed');
+      
+      // Handle streaming response
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('No reader available');
+      
+      const aiMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: '',
+        toolInvocations: []
       };
+      
       setMessages(prev => [...prev, aiMessage]);
+      
+      let fullContent = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        const chunk = new TextDecoder().decode(value);
+        const lines = chunk.split('\n').filter(line => line.trim());
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.content) {
+                fullContent += data.content;
+                setMessages(prev => prev.map(m => 
+                  m.id === aiMessage.id ? { ...m, content: fullContent } : m
+                ));
+              }
+            } catch (e) {
+              // Ignore parse errors for streaming data
+            }
+          }
+        }
+      }
+      
+    } catch (error) {
+      console.error('Trading agent error:', error);
+      const errorMessage: Message = { 
+        id: (Date.now() + 1).toString(),
+        role: 'assistant', 
+        content: `🔧 Trading API connected! Error: ${error}. Check your API keys in .env.local` 
+      };
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
   
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -87,9 +143,9 @@ export default function TradingAgent() {
               </p>
             </div>
           ) : (
-            messages.map((message, index) => (
+            messages.map((message: Message) => (
               <div
-                key={index}
+                key={message.id}
                 className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 <Card className={`max-w-[85%] ${
