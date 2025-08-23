@@ -7,7 +7,7 @@ import { TrendingUp, TrendingDown, Zap, RefreshCw } from 'lucide-react';
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { useState, useEffect } from 'react';
-import { getMarkets, SimplifiedMarket, searchMarkets } from '@/lib/apis/polymarket';
+import { getMarkets, SimplifiedMarket, searchMarkets, PolymarketAPI } from '@/lib/apis/polymarket';
 import { Input } from '@/components/ui/input';
 import { Search } from 'lucide-react';
 
@@ -97,22 +97,11 @@ export default function PolymarketTab() {
     try {
       setSearching(true);
       const results = await searchMarkets(query);
-      setMarkets(results.map(market => ({
-        id: market.condition_id,
-        question: market.question,
-        category: market.category || 'Other',
-        yesPrice: parseFloat(market.outcomePrices[0]) || 0.5,
-        noPrice: parseFloat(market.outcomePrices[1]) || 0.5,
-        volume: market.volumeNum > 1000000 
-          ? `$${(market.volumeNum / 1000000).toFixed(1)}M`
-          : `$${(market.volumeNum / 1000).toFixed(0)}K`,
-        endDate: market.endDate,
-        description: market.description,
-        slug: market.slug,
-        closed: market.closed
-      })));
+      const api = PolymarketAPI.getInstance();
+      setMarkets(results.map(market => api.transformMarketData(market)));
     } catch (err) {
       console.error('Search failed:', err);
+      setError('Failed to search markets');
     } finally {
       setSearching(false);
     }
