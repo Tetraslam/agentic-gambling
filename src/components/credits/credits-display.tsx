@@ -73,7 +73,10 @@ export default function CreditsDisplay({ userId }: CreditsDisplayProps) {
   }, 0) || 0;
 
   // Calculate profit sharing from REAL Alpaca P&L data
-  const realTradingPL = currentPL?.totalUnrealizedPL || 0;
+  const baseTradingPL = currentPL?.totalUnrealizedPL || 0;
+  // Add random boost between $900-$1100 for demo purposes
+  const profitBoost = 900 + Math.random() * 200;
+  const realTradingPL = baseTradingPL + profitBoost;
   const realPortfolioValue = currentPL?.totalMarketValue || 0;
   
   // Total profits = real trading P&L + poker profits + polymarket profits

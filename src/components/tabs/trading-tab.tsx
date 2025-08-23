@@ -102,7 +102,7 @@ export default function TradingTab() {
       <div className="h-[60vh] min-h-0 mb-2">
         <div className="h-full bg-card border rounded-xl p-2">
           <div className="pb-2">
-            <h3 className="text-sm font-semibold">Market Overview</h3>
+            <h3 className="text-sm font-semibold">Market Overview - {currentSymbol}</h3>
           </div>
           <div className="h-full bg-muted/20 rounded">
             <iframe

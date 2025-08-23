@@ -48,7 +48,7 @@ Your personality:
         execute: async ({ symbol }) => {
           ssePush?.({ content: `🔧 Fetching quote for ${symbol}...` });
           const out = await getStockQuote(symbol);
-          ssePush?.({ tool: 'getStockQuote', result: out });
+          ssePush?.({ tool: 'getStockQuote', symbol: symbol.toUpperCase(), result: out });
           return out;
         },
       }),

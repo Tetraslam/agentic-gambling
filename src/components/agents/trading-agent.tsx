@@ -103,6 +103,11 @@ export default function TradingAgent() {
                 scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
               }
               if (data.tool) {
+                // Update TradingView chart when agent calls getStockQuote
+                if (data.tool === 'getStockQuote' && data.symbol) {
+                  setCurrentSymbol(data.symbol);
+                }
+                
                 // optional: render tool outputs inline
                 setLocalMessages(prev => prev.map(m => 
                   m.id === aiMessageId 
