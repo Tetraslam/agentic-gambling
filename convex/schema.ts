@@ -1,0 +1,76 @@
+import { defineSchema, defineTable } from "convex/server";
+import { v } from "convex/values";
+
+export default defineSchema({
+  // Trading messages and trades
+  tradingMessages: defineTable({
+    role: v.union(v.literal("user"), v.literal("assistant")),
+    content: v.string(),
+    timestamp: v.number(),
+    tradeAction: v.optional(v.object({
+      action: v.union(v.literal("buy"), v.literal("sell")),
+      symbol: v.string(),
+      quantity: v.number(),
+      price: v.optional(v.number()),
+    })),
+  }),
+
+  // Trading portfolio positions
+  tradingPositions: defineTable({
+    symbol: v.string(),
+    quantity: v.number(),
+    avgPrice: v.number(),
+    currentPrice: v.optional(v.number()),
+    timestamp: v.number(),
+  }),
+
+  // Poker messages and screenshots
+  pokerMessages: defineTable({
+    role: v.union(v.literal("user"), v.literal("assistant")),
+    content: v.string(),
+    timestamp: v.number(),
+    screenshot: v.optional(v.string()), // base64 encoded
+  }),
+
+  // Poker game states
+  pokerGameStates: defineTable({
+    isPlaying: v.boolean(),
+    lastAction: v.optional(v.string()),
+    chipCount: v.optional(v.number()),
+    timestamp: v.number(),
+  }),
+
+  // Polymarket messages and bets
+  polymarketMessages: defineTable({
+    role: v.union(v.literal("user"), v.literal("assistant")),
+    content: v.string(),
+    timestamp: v.number(),
+    betAction: v.optional(v.object({
+      market: v.string(),
+      position: v.union(v.literal("yes"), v.literal("no")),
+      amount: v.number(),
+      odds: v.optional(v.number()),
+    })),
+  }),
+
+  // Polymarket active bets
+  polymarketBets: defineTable({
+    market: v.string(),
+    position: v.union(v.literal("yes"), v.literal("no")),
+    amount: v.number(),
+    odds: v.optional(v.number()),
+    timestamp: v.number(),
+    isActive: v.boolean(),
+  }),
+
+  // User preferences and settings
+  userSettings: defineTable({
+    userId: v.string(),
+    activeTab: v.union(v.literal("trading"), v.literal("poker"), v.literal("polymarket")),
+    leftSidebarCollapsed: v.boolean(),
+    rightSidebarCollapsed: v.boolean(),
+    polymarketUnhingedMode: v.boolean(),
+    tradingBalance: v.number(),
+    polymarketBalance: v.number(),
+  }),
+});
