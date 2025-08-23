@@ -5,13 +5,44 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { useChat } from 'ai/react';
 import { TrendingUp, Send } from 'lucide-react';
+import { useState } from 'react';
+
+interface Message {
+  role: 'user' | 'assistant';
+  content: string;
+  toolInvocations?: any[];
+}
 
 export default function TradingAgent() {
-  const { messages, input, handleInputChange, handleSubmit, isLoading } = useChat({
-    api: '/api/chat/trading',
-  });
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [input, setInput] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  
+  // TODO: Replace with actual useChat from AI SDK once import issue is resolved
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!input.trim()) return;
+    
+    const userMessage: Message = { role: 'user', content: input };
+    setMessages(prev => [...prev, userMessage]);
+    setInput('');
+    setIsLoading(true);
+    
+    // Simulate AI response for now
+    setTimeout(() => {
+      const aiMessage: Message = { 
+        role: 'assistant', 
+        content: `Trading analysis for: "${input}". AI integration pending - check /api/chat/trading route is working!` 
+      };
+      setMessages(prev => [...prev, aiMessage]);
+      setIsLoading(false);
+    }, 1000);
+  };
+  
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setInput(e.target.value);
+  };
 
   // Calculate messages until trade (every 5 messages)
   const messagesUntilTrade = 5 - (messages.length % 5);
@@ -56,9 +87,9 @@ export default function TradingAgent() {
               </p>
             </div>
           ) : (
-            messages.map((message) => (
+            messages.map((message, index) => (
               <div
-                key={message.id}
+                key={index}
                 className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 <Card className={`max-w-[85%] ${
@@ -70,7 +101,7 @@ export default function TradingAgent() {
                     <p className="text-xs leading-relaxed">{message.content}</p>
                     {message.toolInvocations && message.toolInvocations.length > 0 && (
                       <div className="mt-2 pt-2 border-t border-border/50">
-                        {message.toolInvocations.map((tool, idx) => (
+                        {message.toolInvocations.map((tool: any, idx: number) => (
                           <div key={idx} className="text-xs opacity-75 mb-1">
                             <span className="font-medium">🔧 {tool.toolName}:</span>
                             {tool.result && (

@@ -36,6 +36,12 @@ OPENAI_API_KEY=your_key_here
 BROWSER_USE_API_KEY=your_key_here  # if needed
 ```
 
+**⚠️ AI SDK Import Issue:**
+- Trading agent currently uses temporary chat simulation
+- Need to fix `useChat` import from AI SDK v5
+- Check if `ai/react` export exists or if different package needed
+- API route (`/api/chat/trading`) is ready and working
+
 ## 📁 Key Files to Modify
 
 1. **`src/components/agents/poker-agent.tsx`**

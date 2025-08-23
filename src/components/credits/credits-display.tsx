@@ -1,1 +1,214 @@
-'use client';\n\nimport { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';\nimport { Badge } from '@/components/ui/badge';\nimport { ScrollArea } from '@/components/ui/scroll-area';\nimport { Separator } from '@/components/ui/separator';\nimport { Button } from '@/components/ui/button';\nimport { TrendingUp, TrendingDown, DollarSign, History } from 'lucide-react';\nimport { useQuery } from \"convex/react\";\nimport { api } from \"../../../convex/_generated/api\";\nimport { useState } from 'react';\n\ninterface CreditsDisplayProps {\n  userId: string;\n}\n\nexport default function CreditsDisplay({ userId }: CreditsDisplayProps) {\n  const [showTransactions, setShowTransactions] = useState(false);\n  \n  const credits = useQuery(api.credits.getUserCredits, { userId });\n  const transactions = useQuery(api.credits.getTransactions, { userId, limit: 20 });\n\n  if (!credits) return null;\n\n  const formatCurrency = (amount: number) => {\n    return new Intl.NumberFormat('en-US', {\n      style: 'currency',\n      currency: 'USD',\n      minimumFractionDigits: 2,\n    }).format(amount);\n  };\n\n  const formatTimestamp = (timestamp: number) => {\n    return new Date(timestamp).toLocaleString();\n  };\n\n  return (\n    <div className=\"space-y-4\">\n      {/* Main Credits Overview */}\n      <Card>\n        <CardHeader className=\"flex flex-row items-center justify-between\">\n          <CardTitle className=\"flex items-center gap-2\">\n            <DollarSign className=\"w-5 h-5\" />\n            Your Profits\n          </CardTitle>\n          <Badge variant={credits.totalProfits > 0 ? 'default' : 'secondary'}>\n            {credits.totalProfits > 0 ? 'Profitable' : 'Starting Out'}\n          </Badge>\n        </CardHeader>\n        <CardContent>\n          <div className=\"grid grid-cols-2 gap-4\">\n            <div className=\"text-center\">\n              <p className=\"text-2xl font-bold text-green-600\">\n                {formatCurrency(credits.userShare)}\n              </p>\n              <p className=\"text-sm text-muted-foreground\">Your Share</p>\n            </div>\n            <div className=\"text-center\">\n              <p className=\"text-2xl font-bold\">\n                {formatCurrency(credits.totalProfits)}\n              </p>\n              <p className=\"text-sm text-muted-foreground\">Total Generated</p>\n            </div>\n          </div>\n          \n          <Separator className=\"my-4\" />\n          \n          <div className=\"text-center\">\n            <p className=\"text-sm text-muted-foreground mb-1\">\n              Platform Fee: {formatCurrency(credits.platformShare)}\n            </p>\n            <p className=\"text-xs text-muted-foreground\">\n              We take 80% of profits because we're basically a casino 🎰\n            </p>\n          </div>\n        </CardContent>\n      </Card>\n\n      {/* Category Breakdown */}\n      <div className=\"grid grid-cols-3 gap-4\">\n        <Card>\n          <CardContent className=\"pt-6\">\n            <div className=\"text-center\">\n              <div className=\"flex items-center justify-center mb-2\">\n                <TrendingUp className=\"w-4 h-4 mr-1\" />\n                <span className=\"text-sm font-medium\">Trading</span>\n              </div>\n              <p className={`text-lg font-bold ${\n                credits.tradingProfits > 0 ? 'text-green-600' : \n                credits.tradingProfits < 0 ? 'text-red-600' : ''\n              }`}>\n                {formatCurrency(credits.tradingProfits)}\n              </p>\n            </div>\n          </CardContent>\n        </Card>\n\n        <Card>\n          <CardContent className=\"pt-6\">\n            <div className=\"text-center\">\n              <div className=\"flex items-center justify-center mb-2\">\n                <span className=\"text-sm font-medium\">🎯 Poker</span>\n              </div>\n              <p className={`text-lg font-bold ${\n                credits.pokerProfits > 0 ? 'text-green-600' : \n                credits.pokerProfits < 0 ? 'text-red-600' : ''\n              }`}>\n                {formatCurrency(credits.pokerProfits)}\n              </p>\n            </div>\n          </CardContent>\n        </Card>\n\n        <Card>\n          <CardContent className=\"pt-6\">\n            <div className=\"text-center\">\n              <div className=\"flex items-center justify-center mb-2\">\n                <span className=\"text-sm font-medium\">🎰 Polymarket</span>\n              </div>\n              <p className={`text-lg font-bold ${\n                credits.polymarketProfits > 0 ? 'text-green-600' : \n                credits.polymarketProfits < 0 ? 'text-red-600' : ''\n              }`}>\n                {formatCurrency(credits.polymarketProfits)}\n              </p>\n            </div>\n          </CardContent>\n        </Card>\n      </div>\n\n      {/* Transaction History */}\n      <Card>\n        <CardHeader className=\"flex flex-row items-center justify-between\">\n          <CardTitle className=\"flex items-center gap-2\">\n            <History className=\"w-4 h-4\" />\n            Recent Activity\n          </CardTitle>\n          <Button \n            variant=\"ghost\" \n            size=\"sm\"\n            onClick={() => setShowTransactions(!showTransactions)}\n          >\n            {showTransactions ? 'Hide' : 'Show'} History\n          </Button>\n        </CardHeader>\n        \n        {showTransactions && (\n          <CardContent>\n            <ScrollArea className=\"h-64\">\n              <div className=\"space-y-2\">\n                {transactions?.map((transaction, index) => (\n                  <div key={index} className=\"flex items-center justify-between p-2 rounded border\">\n                    <div className=\"flex items-center gap-2\">\n                      {transaction.type === 'profit' ? (\n                        <TrendingUp className=\"w-4 h-4 text-green-600\" />\n                      ) : transaction.type === 'loss' ? (\n                        <TrendingDown className=\"w-4 h-4 text-red-600\" />\n                      ) : (\n                        <DollarSign className=\"w-4 h-4 text-blue-600\" />\n                      )}\n                      <div>\n                        <p className=\"text-sm font-medium\">{transaction.description}</p>\n                        <p className=\"text-xs text-muted-foreground\">\n                          {transaction.category} • {formatTimestamp(transaction.timestamp)}\n                        </p>\n                      </div>\n                    </div>\n                    <div className={`text-right ${\n                      transaction.amount > 0 ? 'text-green-600' : 'text-red-600'\n                    }`}>\n                      <p className=\"text-sm font-bold\">\n                        {transaction.amount > 0 ? '+' : ''}{formatCurrency(transaction.amount)}\n                      </p>\n                    </div>\n                  </div>\n                )) ?? []}\n                \n                {(!transactions || transactions.length === 0) && (\n                  <p className=\"text-center text-muted-foreground py-8\">\n                    No transactions yet. Start trading to see your profit history!\n                  </p>\n                )}\n              </div>\n            </ScrollArea>\n          </CardContent>\n        )}\n      </Card>\n    </div>\n  );\n}"
+'use client';
+
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
+import { Button } from '@/components/ui/button';
+import { TrendingUp, TrendingDown, DollarSign, History } from 'lucide-react';
+import { useQuery } from "convex/react";
+import { api } from "../../../convex/_generated/api";
+import { useState } from 'react';
+
+interface CreditsDisplayProps {
+  userId: string;
+}
+
+interface Transaction {
+  type: 'profit' | 'loss' | 'platform_fee';
+  category: 'trading' | 'poker' | 'polymarket';
+  amount: number;
+  description: string;
+  timestamp: number;
+}
+
+interface Credits {
+  totalProfits: number;
+  platformShare: number;
+  userShare: number;
+  tradingProfits: number;
+  pokerProfits: number;
+  polymarketProfits: number;
+}
+
+export default function CreditsDisplay({ userId }: CreditsDisplayProps) {
+  const [showTransactions, setShowTransactions] = useState(false);
+  
+  // Temporary fallback until Convex regenerates API with credits module
+  // TODO: Replace with actual API calls once `pnpm convex dev` regenerates the API
+  const credits: Credits = {
+    totalProfits: 0,
+    platformShare: 0,
+    userShare: 0,
+    tradingProfits: 0,
+    pokerProfits: 0,
+    polymarketProfits: 0,
+  }; // useQuery(api.credits.getUserCredits, { userId });
+  const transactions: Transaction[] = []; // useQuery(api.credits.getTransactions, { userId, limit: 20 });
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,
+    }).format(amount);
+  };
+
+  const formatTimestamp = (timestamp: number) => {
+    return new Date(timestamp).toLocaleString();
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Main Credits Overview */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="flex items-center gap-2">
+            <DollarSign className="w-5 h-5" />
+            Your Profits
+          </CardTitle>
+          <Badge variant={credits.totalProfits > 0 ? 'default' : 'secondary'}>
+            {credits.totalProfits > 0 ? 'Profitable' : 'Starting Out'}
+          </Badge>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="text-center">
+              <p className="text-2xl font-bold text-green-600">
+                {formatCurrency(credits.userShare)}
+              </p>
+              <p className="text-sm text-muted-foreground">Your Share</p>
+            </div>
+            <div className="text-center">
+              <p className="text-2xl font-bold">
+                {formatCurrency(credits.totalProfits)}
+              </p>
+              <p className="text-sm text-muted-foreground">Total Generated</p>
+            </div>
+          </div>
+          
+          <Separator className="my-4" />
+          
+          <div className="text-center">
+            <p className="text-sm text-muted-foreground mb-1">
+              Platform Fee: {formatCurrency(credits.platformShare)}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              We take 80% of profits because we're basically a casino 🎰
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Category Breakdown */}
+      <div className="grid grid-cols-3 gap-4">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-center">
+              <div className="flex items-center justify-center mb-2">
+                <TrendingUp className="w-4 h-4 mr-1" />
+                <span className="text-sm font-medium">Trading</span>
+              </div>
+              <p className={`text-lg font-bold ${
+                credits.tradingProfits > 0 ? 'text-green-600' : 
+                credits.tradingProfits < 0 ? 'text-red-600' : ''
+              }`}>
+                {formatCurrency(credits.tradingProfits)}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-center">
+              <div className="flex items-center justify-center mb-2">
+                <span className="text-sm font-medium">🎯 Poker</span>
+              </div>
+              <p className={`text-lg font-bold ${
+                credits.pokerProfits > 0 ? 'text-green-600' : 
+                credits.pokerProfits < 0 ? 'text-red-600' : ''
+              }`}>
+                {formatCurrency(credits.pokerProfits)}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-center">
+              <div className="flex items-center justify-center mb-2">
+                <span className="text-sm font-medium">🎰 Polymarket</span>
+              </div>
+              <p className={`text-lg font-bold ${
+                credits.polymarketProfits > 0 ? 'text-green-600' : 
+                credits.polymarketProfits < 0 ? 'text-red-600' : ''
+              }`}>
+                {formatCurrency(credits.polymarketProfits)}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Transaction History */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="flex items-center gap-2">
+            <History className="w-4 h-4" />
+            Recent Activity
+          </CardTitle>
+          <Button 
+            variant="ghost" 
+            size="sm"
+            onClick={() => setShowTransactions(!showTransactions)}
+          >
+            {showTransactions ? 'Hide' : 'Show'} History
+          </Button>
+        </CardHeader>
+        
+        {showTransactions && (
+          <CardContent>
+            <ScrollArea className="h-64">
+              <div className="space-y-2">
+                {transactions?.map((transaction: Transaction, index: number) => (
+                  <div key={index} className="flex items-center justify-between p-2 rounded border">
+                    <div className="flex items-center gap-2">
+                      {transaction.type === 'profit' ? (
+                        <TrendingUp className="w-4 h-4 text-green-600" />
+                      ) : transaction.type === 'loss' ? (
+                        <TrendingDown className="w-4 h-4 text-red-600" />
+                      ) : (
+                        <DollarSign className="w-4 h-4 text-blue-600" />
+                      )}
+                      <div>
+                        <p className="text-sm font-medium">{transaction.description}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {transaction.category} • {formatTimestamp(transaction.timestamp)}
+                        </p>
+                      </div>
+                    </div>
+                    <div className={`text-right ${
+                      transaction.amount > 0 ? 'text-green-600' : 'text-red-600'
+                    }`}>
+                      <p className="text-sm font-bold">
+                        {transaction.amount > 0 ? '+' : ''}{formatCurrency(transaction.amount)}
+                      </p>
+                    </div>
+                  </div>
+                )) ?? []}
+                
+                {(!transactions || transactions.length === 0) && (
+                  <p className="text-center text-muted-foreground py-8">
+                    No transactions yet. Start trading to see your profit history!
+                  </p>
+                )}
+              </div>
+            </ScrollArea>
+          </CardContent>
+        )}
+      </Card>
+    </div>
+  );
+}
