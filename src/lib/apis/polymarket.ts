@@ -15,7 +15,7 @@ export interface PolymarketMarket {
   category: string | null;
   subCategory: string;
   description: string;
-  outcomePrices: string[];
+  outcomePrices: string[] | string;
   outcomes: string[];
   volume: string | null;
   volumeNum: number;
@@ -95,13 +95,10 @@ export class PolymarketAPI {
    */
   async getMarkets(limit = 50, offset = 0): Promise<PolymarketMarket[]> {
     try {
-      const response = await axios.get(`${POLYMARKET_GAMMA_API}/markets`, {
-        headers: this.getHeaders(),
+      const response = await axios.get('/api/polymarket/markets', {
         params: {
           limit,
           offset,
-          active: true,
-          closed: false,
           order: 'volume24hr',
           ascending: false,
         },
@@ -119,14 +116,9 @@ export class PolymarketAPI {
    */
   async getFeaturedMarkets(limit = 20): Promise<PolymarketMarket[]> {
     try {
-      const response = await axios.get(`${POLYMARKET_GAMMA_API}/markets`, {
-        headers: this.getHeaders(),
+      const response = await axios.get('/api/polymarket/featured', {
         params: {
           limit,
-          active: true,
-          closed: false,
-          order: 'featured',
-          ascending: false,
         },
       });
       
@@ -143,15 +135,10 @@ export class PolymarketAPI {
    */
   async searchMarkets(query: string, limit = 20): Promise<PolymarketMarket[]> {
     try {
-      const response = await axios.get(`${POLYMARKET_GAMMA_API}/markets`, {
-        headers: this.getHeaders(),
+      const response = await axios.get('/api/polymarket/search', {
         params: {
-          limit,
-          active: true,
-          closed: false,
-          order: 'volume24hr',
-          ascending: false,
           query,
+          limit,
         },
       });
       
@@ -167,12 +154,9 @@ export class PolymarketAPI {
    */
   async getMarketsByCategory(category: string, limit = 20): Promise<PolymarketMarket[]> {
     try {
-      const response = await axios.get(`${POLYMARKET_GAMMA_API}/markets`, {
-        headers: this.getHeaders(),
+      const response = await axios.get('/api/polymarket/markets', {
         params: {
           limit,
-          active: true,
-          closed: false,
           category,
           order: 'volume24hr',
           ascending: false,
@@ -191,7 +175,27 @@ export class PolymarketAPI {
    */
   transformMarketData(market: PolymarketMarket): SimplifiedMarket {
     // Parse outcome prices (usually [yes_price, no_price])
-    const prices = market.outcomePrices.map(price => parseFloat(price));
+    // Handle both string and array formats from the API
+    let prices: number[] = [0.5, 0.5]; // Default fallback
+    
+    try {
+      if (market.outcomePrices) {
+        if (typeof market.outcomePrices === 'string') {
+          // API returns JSON string like "[\"0.045\", \"0.955\"]"
+          const parsedPrices = JSON.parse(market.outcomePrices);
+          prices = Array.isArray(parsedPrices) 
+            ? parsedPrices.map(price => parseFloat(price))
+            : [0.5, 0.5];
+        } else if (Array.isArray(market.outcomePrices)) {
+          // Already an array
+          prices = market.outcomePrices.map(price => parseFloat(price));
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to parse outcome prices:', market.outcomePrices, error);
+      prices = [0.5, 0.5]; // Fallback to 50/50 odds
+    }
+    
     const yesPrice = prices[0] || 0.5;
     const noPrice = prices[1] || (1 - yesPrice);
 

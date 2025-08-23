@@ -55,13 +55,11 @@ describe('PolymarketAPI', () => {
       const result = await api.getMarkets();
       
       expect(mockedAxios.get).toHaveBeenCalledWith(
-        'https://gamma-api.polymarket.com/markets',
+        '/api/polymarket/markets',
         expect.objectContaining({
           params: {
             limit: 50,
             offset: 0,
-            active: true,
-            closed: false,
             order: 'volume24hr',
             ascending: false,
           }
@@ -323,15 +321,11 @@ describe('PolymarketAPI', () => {
       await api.searchMarkets('bitcoin');
 
       expect(mockedAxios.get).toHaveBeenCalledWith(
-        'https://gamma-api.polymarket.com/markets',
+        '/api/polymarket/search',
         expect.objectContaining({
           params: {
+            query: 'bitcoin',
             limit: 20,
-            active: true,
-            closed: false,
-            order: 'volume24hr',
-            ascending: false,
-            query: 'bitcoin'
           }
         })
       );
@@ -354,14 +348,10 @@ describe('PolymarketAPI', () => {
       await api.getFeaturedMarkets();
 
       expect(mockedAxios.get).toHaveBeenCalledWith(
-        'https://gamma-api.polymarket.com/markets',
+        '/api/polymarket/featured',
         expect.objectContaining({
           params: {
             limit: 20,
-            active: true,
-            closed: false,
-            order: 'featured',
-            ascending: false,
           }
         })
       );
