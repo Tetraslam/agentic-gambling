@@ -98,7 +98,7 @@ export default function TradingTab() {
 
   return (
     <div className="h-full flex flex-col">
-      {/* Top Section - Chart (60% of screen height) */}
+      {/* Top Section - Chart (FIXED 60% of screen height) */}
       <div className="h-[60vh] min-h-0 mb-2">
         <div className="h-full bg-card border rounded-xl p-2">
           <div className="pb-2">
@@ -114,9 +114,9 @@ export default function TradingTab() {
         </div>
       </div>
 
-      {/* Bottom Section - Portfolio (takes remaining space) */}
-      <div className="flex-1 min-h-0 flex gap-2">
-        <Tabs defaultValue="portfolio" className="flex-1 flex flex-col">
+      {/* Bottom Section - Portfolio (FIXED remaining height) */}
+      <div className="h-[calc(40vh-2rem)] min-h-0 flex gap-2">
+        <Tabs defaultValue="portfolio" className="flex-1 flex flex-col h-full">
           <TabsList className="grid w-full grid-cols-3 mb-2 flex-shrink-0">
             <TabsTrigger value="portfolio">Portfolio</TabsTrigger>
             <TabsTrigger value="pending">Pending Orders</TabsTrigger>
@@ -244,7 +244,7 @@ export default function TradingTab() {
                 </Badge>
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto">
+            <div className="space-y-2 flex-1 overflow-y-auto">
               {loading ? (
                 <div className="text-center py-4">
                   <p className="text-xs text-muted-foreground">Loading orders...</p>
@@ -257,28 +257,26 @@ export default function TradingTab() {
                   </p>
                 </div>
               ) : (
-                <div className="space-y-2">
-                  {pendingOrders.map((order, index) => {
-                    const isLive = order.status === 'accepted' || order.status === 'pending_new';
-                    return (
-                      <div key={index} className="p-2 border rounded text-xs">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="font-medium">{order.symbol}</span>
-                          <Badge variant={isLive ? "default" : "secondary"} className="text-xs">
-                            {order.status}
-                          </Badge>
-                        </div>
-                        <div className="text-muted-foreground flex justify-between">
-                          <span>{order.side.toUpperCase()} {order.qty}</span>
-                          <span>{order.type}</span>
-                        </div>
-                        <div className="text-xs text-muted-foreground mt-1">
-                          {isLive ? 'Waiting for market open' : 'Order processing'}
-                        </div>
+                pendingOrders.map((order, index) => {
+                  const isLive = order.status === 'accepted' || order.status === 'pending_new';
+                  return (
+                    <div key={index} className="p-2 border rounded text-xs">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-medium">{order.symbol}</span>
+                        <Badge variant={isLive ? "default" : "secondary"} className="text-xs">
+                          {order.status}
+                        </Badge>
                       </div>
-                    );
-                  })}
-                </div>
+                      <div className="text-muted-foreground flex justify-between">
+                        <span>{order.side.toUpperCase()} {order.qty}</span>
+                        <span>{order.type}</span>
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-1">
+                        {isLive ? 'Waiting for market open' : 'Order processing'}
+                      </div>
+                    </div>
+                  );
+                })
               )}
             </div>
           </div>
