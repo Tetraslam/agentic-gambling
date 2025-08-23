@@ -6,6 +6,8 @@ import {
   ResizablePanel, 
   ResizableHandle 
 } from '@/components/ui/resizable';
+import { Button } from '@/components/ui/button';
+import { ChevronRight } from 'lucide-react';
 import LeftSidebar from './left-sidebar';
 import RightSidebar from './right-sidebar';
 import TradingTab from '../tabs/trading-tab';
@@ -19,21 +21,48 @@ export default function MainLayout() {
   const settings = useQuery(api.userSettings.getSettings);
   const updateSettings = useMutation(api.userSettings.updateSettings);
   const activeTab = settings?.activeTab || 'trading';
+  const leftSidebarCollapsed = settings?.leftSidebarCollapsed ?? false;
+
+  const toggleLeftSidebar = () => {
+    updateSettings({ leftSidebarCollapsed: !leftSidebarCollapsed });
+  };
 
   return (
     <div className="flex h-screen w-full">
-      <ResizablePanelGroup direction="horizontal" className="w-full">
+      {/* Collapsed Left Panel Toggle Button */}
+      {leftSidebarCollapsed && (
+        <div className="flex flex-col">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={toggleLeftSidebar}
+            className="h-10 w-10 p-0 rounded-none border-r border-b hover:bg-muted/50"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+          <div className="flex-1 w-10 bg-muted/20 border-r flex items-center justify-center">
+            <div className="writing-mode-vertical text-xs text-muted-foreground font-medium tracking-wider" style={{ writingMode: 'vertical-rl' }}>
+              🧠 BRAINROT
+            </div>
+          </div>
+        </div>
+      )}
+      
+      <ResizablePanelGroup direction="horizontal" className="flex-1">
         {/* Left Panel - Brainrot */}
-        <ResizablePanel defaultSize={20} minSize={15} maxSize={35}>
-          <LeftSidebar />
-        </ResizablePanel>
-        
-        <ResizableHandle withHandle />
+        {!leftSidebarCollapsed && (
+          <>
+            <ResizablePanel defaultSize={20} minSize={15} maxSize={35}>
+              <LeftSidebar onToggleCollapse={toggleLeftSidebar} />
+            </ResizablePanel>
+            <ResizableHandle withHandle />
+          </>
+        )}
         
         {/* Main Content */}
-        <ResizablePanel defaultSize={60}>
+        <ResizablePanel defaultSize={leftSidebarCollapsed ? 80 : 60}>
           <div className="flex flex-col h-full">
-            <Tabs value={activeTab} onValueChange={(tab) => updateSettings({ activeTab: tab })}>
+            <Tabs value={activeTab} onValueChange={(tab) => updateSettings({ activeTab: tab as "trading" | "poker" | "polymarket" | "credits" })}>
               <TabsList className="m-2">
                 <TabsTrigger value="trading">📈 Trading</TabsTrigger>
                 <TabsTrigger value="poker">🃏 Poker</TabsTrigger>
@@ -41,17 +70,17 @@ export default function MainLayout() {
                 <TabsTrigger value="credits">💰 Credits</TabsTrigger>
               </TabsList>
 
-              <div className="flex-1 p-2">
-                <TabsContent value="trading" className="h-full">
+              <div className="flex-1 p-2 overflow-auto">
+                <TabsContent value="trading" className="h-full overflow-auto">
                   <TradingTab />
                 </TabsContent>
-                <TabsContent value="poker" className="h-full">
+                <TabsContent value="poker" className="h-full overflow-auto">
                   <PokerTab />
                 </TabsContent>
-                <TabsContent value="polymarket" className="h-full">
+                <TabsContent value="polymarket" className="h-full overflow-auto">
                   <PolymarketTab />
                 </TabsContent>
-                <TabsContent value="credits" className="h-full">
+                <TabsContent value="credits" className="h-full overflow-auto">
                   <div className="p-4">
                     <CreditsDisplay userId="user-1" />
                   </div>

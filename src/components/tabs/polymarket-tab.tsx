@@ -3,7 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { TrendingUp, TrendingDown, Zap, RefreshCw } from 'lucide-react';
+import { TrendingUp, TrendingDown, Zap, RefreshCw, Shield, DollarSign } from 'lucide-react';
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { useState, useEffect } from 'react';
@@ -15,11 +15,15 @@ export default function PolymarketTab() {
   // Get reactive data from Convex
   const activeBets = useQuery(api.polymarket.getActiveBets) || [];
   const tradeCount = useQuery(api.polymarket.getTradeCount) || 0;
+  const betSummary = useQuery(api.polymarket.getBetSummary);
   const settings = useQuery(api.userSettings.getSettings);
   const updateSettings = useMutation(api.userSettings.updateSettings);
+  const addMessage = useMutation(api.polymarket.addMessage);
+  const simulateBetResolution = useMutation(api.polymarket.simulateBetResolution);
 
   const balance = settings?.polymarketBalance || 10000;
   const unhingedMode = settings?.polymarketUnhingedMode ?? true;
+  const demoMode = settings?.polymarketDemoMode ?? true;
 
   // State for real Polymarket data
   const [markets, setMarkets] = useState<SimplifiedMarket[]>([]);
@@ -31,6 +35,10 @@ export default function PolymarketTab() {
 
   const toggleUnhingedMode = () => {
     updateSettings({ polymarketUnhingedMode: !unhingedMode });
+  };
+
+  const toggleDemoMode = () => {
+    updateSettings({ polymarketDemoMode: !demoMode });
   };
 
   // Fetch real Polymarket data
@@ -115,8 +123,102 @@ export default function PolymarketTab() {
     return () => clearTimeout(timeoutId);
   }, [searchQuery]);
 
+  // Enhanced trading function with proper demo/real distinction
+  const handleTrade = async (market: SimplifiedMarket, position: 'yes' | 'no', amount: number = 100) => {
+    try {
+      const odds = position === 'yes' ? market.yesPrice : market.noPrice;
+      const potentialWin = amount / odds;
+      
+      if (demoMode) {
+        // ===== DEMO MODE =====
+        // Create demo bet action
+        const betAction = {
+          market: market.question,
+          position,
+          amount,
+          odds,
+          isDemo: true, // ✅ Mark as demo
+        };
+
+        // Add instant demo message
+        await addMessage({
+          role: 'assistant',
+          content: `�� Demo Trade Placed! $${amount} on ${position.toUpperCase()} for "${market.question}" (${(odds * 100).toFixed(0)}¢). Potential win: $${potentialWin.toFixed(2)} (simulated)`,
+          betAction,
+        });
+
+        // Update demo balance immediately
+        await updateSettings({
+          polymarketBalance: balance - amount,
+        });
+
+        console.log(`✅ Demo trade: $${amount} on ${position.toUpperCase()} for "${market.question}"`);
+        
+      } else {
+        // ===== LIVE MODE =====
+        // Show confirmation dialog first
+        const confirmed = window.confirm(
+          `🚨 REAL MONEY TRADE 🚨\n\nPlace $${amount} on ${position.toUpperCase()} for:\n"${market.question}"\n\nOdds: ${(odds * 100).toFixed(0)}¢\nPotential win: $${potentialWin.toFixed(2)}\n\nThis will use real money. Continue?`
+        );
+        
+        if (!confirmed) {
+          console.log('❌ Real trade cancelled by user');
+          return;
+        }
+
+        // Create pending real bet action
+        const betAction = {
+          market: market.question,
+          position,
+          amount,
+          odds,
+          isDemo: false, // ✅ Mark as real
+        };
+
+        // Add pending message
+        await addMessage({
+          role: 'assistant',
+          content: `💰 Live Trade Pending... $${amount} on ${position.toUpperCase()} for "${market.question}" (${(odds * 100).toFixed(0)}¢). Processing real trade...`,
+          betAction,
+        });
+
+        // Simulate real trade processing delay
+        setTimeout(async () => {
+          try {
+            // TODO: Here we would integrate with actual Polymarket API
+            // For now, simulate failure since real trading is not fully implemented
+            
+            await addMessage({
+              role: 'assistant',
+              content: `❌ Live Trade Failed: Real trading not yet implemented. Please use Demo Mode for testing. (Would have placed $${amount} on ${position.toUpperCase()})`,
+            });
+
+            console.log(`❌ Real trade failed: $${amount} on ${position.toUpperCase()} for "${market.question}" - not implemented`);
+            
+          } catch (error) {
+            await addMessage({
+              role: 'assistant',
+              content: `❌ Live Trade Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            });
+            console.error('Real trade error:', error);
+          }
+        }, 2000 + Math.random() * 3000); // 2-5 second delay to simulate real network
+
+        // DON'T update balance immediately for real trades - wait for confirmation
+        console.log(`⏳ Real trade pending: $${amount} on ${position.toUpperCase()} for "${market.question}"`);
+      }
+      
+    } catch (error) {
+      console.error(`Error placing ${demoMode ? 'demo' : 'real'} trade:`, error);
+      
+      await addMessage({
+        role: 'assistant',
+        content: `❌ Trade Error: Failed to place ${demoMode ? 'demo' : 'real'} trade. ${error instanceof Error ? error.message : 'Unknown error'}`,
+      });
+    }
+  };
   return (
-    <div className="h-full flex flex-col gap-4">
+    <div className="h-full flex flex-col gap-4 overflow-hidden">
       {/* Header with Balance & Unhinged Mode */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -145,6 +247,23 @@ export default function PolymarketTab() {
               )}
             </div>
           </Card>
+
+          {betSummary && (
+            <Card className="px-4 py-2">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium">Profits:</span>
+                <Badge 
+                  variant={betSummary.totalProfits >= 0 ? "default" : "destructive"}
+                  className="text-sm"
+                >
+                  ${betSummary.totalProfits.toFixed(2)}
+                </Badge>
+                <span className="text-xs text-muted-foreground">
+                  (Your share: ${(betSummary.userShare || 0).toFixed(2)})
+                </span>
+              </div>
+            </Card>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -167,6 +286,15 @@ export default function PolymarketTab() {
             <Zap className="w-4 h-4" />
             {unhingedMode ? 'UNHINGED' : 'Rational'}
           </Button>
+          
+          <Button 
+            variant={demoMode ? "secondary" : "default"}
+            onClick={toggleDemoMode}
+            className="flex items-center gap-2"
+          >
+            {demoMode ? <Shield className="w-4 h-4" /> : <DollarSign className="w-4 h-4" />}
+            {demoMode ? 'DEMO' : 'LIVE'}
+          </Button>
         </div>
       </div>
 
@@ -185,6 +313,48 @@ export default function PolymarketTab() {
         </div>
       )}
 
+      {/* Active Bets Section */}
+      {activeBets.length > 0 && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg flex items-center gap-2">
+              🎯 Active Bets ({activeBets.length})
+              {demoMode && (
+                <Badge variant="secondary" className="text-xs">
+                  Demo Mode
+                </Badge>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {activeBets.slice(0, 6).map((bet, index) => (
+                <div key={bet._id} className="flex items-center justify-between p-3 border rounded-lg">
+                  <div className="flex-1">
+                    <div className="font-medium text-sm truncate" title={bet.market}>
+                      {bet.market.slice(0, 40)}...
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      ${bet.amount} on {bet.position.toUpperCase()} ({(bet.odds! * 100).toFixed(0)}¢)
+                    </div>
+                  </div>
+                  {demoMode && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => simulateBetResolution({ betId: bet._id })}
+                      className="text-xs"
+                    >
+                      Resolve
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Search Bar */}
       <div className="relative">
         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
@@ -200,7 +370,8 @@ export default function PolymarketTab() {
       </div>
 
       {/* Markets Grid */}
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-4 overflow-auto">
+      <div className="flex-1 overflow-auto">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 p-1">
         {loading && markets.length === 0 ? (
           // Loading skeleton
           Array.from({ length: 4 }).map((_, index) => (
@@ -246,10 +417,7 @@ export default function PolymarketTab() {
                     <Button 
                       variant="outline" 
                       className="h-16 flex flex-col gap-1 hover:bg-green-50 hover:border-green-300"
-                      onClick={() => {
-                        // This would be where fake trades are placed for demo
-                        console.log(`Fake bet: YES on "${market.question}"`);
-                      }}
+                      onClick={() => handleTrade(market, 'yes', 100)}
                     >
                       <div className="flex items-center gap-1">
                         <TrendingUp className="w-4 h-4 text-green-600" />
@@ -263,10 +431,7 @@ export default function PolymarketTab() {
                     <Button 
                       variant="outline" 
                       className="h-16 flex flex-col gap-1 hover:bg-red-50 hover:border-red-300"
-                      onClick={() => {
-                        // This would be where fake trades are placed for demo
-                        console.log(`Fake bet: NO on "${market.question}"`);
-                      }}
+                      onClick={() => handleTrade(market, 'no', 100)}
                     >
                       <div className="flex items-center gap-1">
                         <TrendingDown className="w-4 h-4 text-red-600" />
@@ -294,6 +459,7 @@ export default function PolymarketTab() {
             </Card>
           ))
         )}
+        </div>
       </div>
 
       {/* Active Bets */}

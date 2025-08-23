@@ -19,6 +19,7 @@ export const getSettings = query({
       leftSidebarCollapsed: false,
       rightSidebarCollapsed: false,
       polymarketUnhingedMode: true,
+      polymarketDemoMode: true,
       tradingBalance: 10000,
       polymarketBalance: 10000,
     };
@@ -32,6 +33,7 @@ export const updateSettings = mutation({
     leftSidebarCollapsed: v.optional(v.boolean()),
     rightSidebarCollapsed: v.optional(v.boolean()),
     polymarketUnhingedMode: v.optional(v.boolean()),
+    polymarketDemoMode: v.optional(v.boolean()),
     tradingBalance: v.optional(v.number()),
     polymarketBalance: v.optional(v.number()),
   },
@@ -47,6 +49,7 @@ export const updateSettings = mutation({
       leftSidebarCollapsed: args.leftSidebarCollapsed ?? existing?.leftSidebarCollapsed ?? false,
       rightSidebarCollapsed: args.rightSidebarCollapsed ?? existing?.rightSidebarCollapsed ?? false,
       polymarketUnhingedMode: args.polymarketUnhingedMode ?? existing?.polymarketUnhingedMode ?? true,
+      polymarketDemoMode: args.polymarketDemoMode ?? existing?.polymarketDemoMode ?? true,
       tradingBalance: args.tradingBalance ?? existing?.tradingBalance ?? 10000,
       polymarketBalance: args.polymarketBalance ?? existing?.polymarketBalance ?? 10000,
     };

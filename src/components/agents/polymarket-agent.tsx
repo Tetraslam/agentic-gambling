@@ -26,6 +26,7 @@ export default function PolymarketAgent() {
 
   const balance = settings?.polymarketBalance || 10000;
   const unhingedMode = settings?.polymarketUnhingedMode ?? true;
+  const demoMode = settings?.polymarketDemoMode ?? true;
 
   // Load markets for trading
   useEffect(() => {
@@ -129,42 +130,76 @@ export default function PolymarketAgent() {
 
     setIsThinking(true);
 
-    // Simulate agent thinking
-    setTimeout(async () => {
-      const normalResponses = [
-        "Interesting market dynamics here. Let me analyze the probability curves...",
-        "The prediction markets are showing some unusual activity lately.",
-        "I'm seeing some arbitrage opportunities across different platforms.",
-        "Market sentiment seems to be shifting based on recent events.",
-        "The liquidity in this market is quite thin, interesting...",
-      ];
+    // Call the AI-powered Polymarket API
+    try {
+      const response = await fetch('/api/chat/polymarket', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messages: [
+            ...messages.slice(-10), // Keep last 10 messages for context
+            { role: 'user', content: userMessage }
+          ],
+          demoMode: demoMode, // Use current setting
+        }),
+      });
 
-      const unhingedResponses = [
-        "🚀 BRO, this market is SCREAMING at me! Time to make some MOVES!",
-        "💀 Either we're going to the moon or losing it all! No middle ground!",
-        "🔥 My prediction spidey-senses are TINGLING! Time for some chaos!",
-        "⚡ LIGHTNING ROUND! Let me place like 5 trades real quick!",
-        "🎰 Vegas mode activated! Let's make this interesting!",
-        "💎 Diamond hands on these predictions! HODL the chaos!",
-        "🌙 When in doubt, bet on the most absurd outcome!",
-        "🎯 My gut > your research! Fight me!",
-      ];
+      if (!response.body) {
+        throw new Error('No response body');
+      }
 
-      const responses = unhingedMode ? unhingedResponses : normalResponses;
-      const response = responses[Math.floor(Math.random() * responses.length)];
-      
-      // Maybe execute a trade based on user message
-      if (unhingedMode && Math.random() > 0.4) {
-        await executeRandomTrade();
-      } else {
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let aiResponse = '';
+
+      // Stream the response
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (line.startsWith('0:')) {
+            // Extract the content from the AI SDK format
+            try {
+              const content = line.slice(2);
+              aiResponse += content;
+            } catch (e) {
+              // Skip invalid JSON lines
+            }
+          }
+        }
+      }
+
+      // Add the AI response to the chat
+      if (aiResponse.trim()) {
         await addMessage({
           role: 'assistant',
-          content: response,
+          content: aiResponse.trim(),
         });
       }
 
+    } catch (error) {
+      console.error('Error calling AI API:', error);
+      
+      // Fallback to simple response if AI fails
+      const fallbackResponses = [
+        "🤖 My AI brain is having a moment... but I'm still bullish on this market!",
+        "⚡ Technical difficulties, but my prediction instincts are still firing!",
+        "🔄 Rebooting my market analysis algorithms... give me a sec!",
+      ];
+      
+      await addMessage({
+        role: 'assistant',
+        content: fallbackResponses[Math.floor(Math.random() * fallbackResponses.length)],
+      });
+    } finally {
       setIsThinking(false);
-    }, 1000 + Math.random() * 2000);
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -175,7 +210,7 @@ export default function PolymarketAgent() {
   };
 
   return (
-    <div className="h-full flex flex-col p-4">
+    <div className="h-full flex flex-col p-4 overflow-hidden">
       {/* Agent Status */}
       <Card className="mb-4">
         <CardContent className="pt-4">
@@ -234,7 +269,7 @@ export default function PolymarketAgent() {
 
       {/* Messages */}
       <ScrollArea className="flex-1 mb-4">
-        <div className="space-y-4">
+        <div className="space-y-4 p-2">
           {messages.length === 0 && (
             <div className="text-center text-muted-foreground py-8">
               <p>🎲 I'm your polymarket agent!</p>
