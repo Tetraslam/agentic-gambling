@@ -19,6 +19,9 @@ OPENAI_API_KEY=your_openai_key_here
 # Convex (for auth & data storage)
 CONVEX_DEPLOYMENT=your_convex_deployment_url
 NEXT_PUBLIC_CONVEX_URL=your_convex_url
+
+# Autumn API for billing/monetization
+AUTUMN_API_KEY=your_autumn_api_key_here
 ```
 
 ## Getting API Keys
@@ -28,3 +31,4 @@ NEXT_PUBLIC_CONVEX_URL=your_convex_url
 3. **Perplexity**: https://www.perplexity.ai/settings/api
 4. **OpenAI**: https://platform.openai.com/api-keys
 5. **Convex**: https://convex.dev/ (set up via `pnpm convex dev`)
+6. **Autumn**: https://app.useautumn.com/ (billing platform)

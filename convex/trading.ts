@@ -87,3 +87,45 @@ export const getMessageCount = query({
     return messages.length;
   },
 });
+
+// Update portfolio P&L data from Alpaca
+export const updatePortfolioPL = mutation({
+  args: {
+    totalUnrealizedPL: v.number(),
+    totalMarketValue: v.number(),
+    totalCostBasis: v.number(),
+  },
+  handler: async (ctx, args) => {
+    // For now, we'll just store the latest P&L data
+    // In a real app, you'd want to store historical data
+    const existingPL = await ctx.db
+      .query("tradingPL")
+      .order("desc")
+      .first();
+
+    const plData = {
+      totalUnrealizedPL: args.totalUnrealizedPL,
+      totalMarketValue: args.totalMarketValue,
+      totalCostBasis: args.totalCostBasis,
+      timestamp: Date.now(),
+    };
+
+    if (existingPL) {
+      await ctx.db.patch(existingPL._id, plData);
+      return existingPL._id;
+    } else {
+      return await ctx.db.insert("tradingPL", plData);
+    }
+  },
+});
+
+// Get current portfolio P&L
+export const getCurrentPL = query({
+  args: {},
+  handler: async (ctx) => {
+    return await ctx.db
+      .query("tradingPL")
+      .order("desc")
+      .first();
+  },
+});

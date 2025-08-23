@@ -146,6 +146,58 @@ export async function getOrders(): Promise<Order[]> {
   }
 }
 
+// Get only pending/open orders
+export async function getPendingOrders(): Promise<Order[]> {
+  try {
+    const response = await fetch(`${ALPACA_BASE_URL}/v2/orders?status=open&limit=50`, {
+      headers: alpacaHeaders,
+    });
+    
+    const data = await response.json();
+    
+    return data.map((order: any) => ({
+      id: order.id,
+      symbol: order.symbol,
+      qty: parseInt(order.qty),
+      side: order.side,
+      type: order.type,
+      status: order.status,
+      filled_at: order.filled_at,
+      filled_price: order.filled_avg_price ? parseFloat(order.filled_avg_price) : undefined,
+    }));
+  } catch (error) {
+    console.error('Error fetching pending orders:', error);
+    return [];
+  }
+}
+
+// Calculate total portfolio P&L from positions
+export async function getPortfolioPL(): Promise<{
+  totalUnrealizedPL: number;
+  totalMarketValue: number;
+  totalCostBasis: number;
+}> {
+  try {
+    const positions = await getPositions();
+    const totalUnrealizedPL = positions.reduce((sum, pos) => sum + pos.unrealizedPL, 0);
+    const totalMarketValue = positions.reduce((sum, pos) => sum + pos.marketValue, 0);
+    const totalCostBasis = positions.reduce((sum, pos) => sum + (pos.quantity * pos.avgPrice), 0);
+    
+    return {
+      totalUnrealizedPL,
+      totalMarketValue,
+      totalCostBasis,
+    };
+  } catch (error) {
+    console.error('Error calculating portfolio P&L:', error);
+    return {
+      totalUnrealizedPL: 0,
+      totalMarketValue: 0,
+      totalCostBasis: 0,
+    };
+  }
+}
+
 export async function cancelOrder(orderId: string): Promise<boolean> {
   try {
     const response = await fetch(`${ALPACA_BASE_URL}/v2/orders/${orderId}`, {

@@ -24,6 +24,14 @@ export default defineSchema({
     timestamp: v.number(),
   }),
 
+  // Trading portfolio P&L data
+  tradingPL: defineTable({
+    totalUnrealizedPL: v.number(),
+    totalMarketValue: v.number(),
+    totalCostBasis: v.number(),
+    timestamp: v.number(),
+  }),
+
   // Poker messages and screenshots
   pokerMessages: defineTable({
     role: v.union(v.literal("user"), v.literal("assistant")),
