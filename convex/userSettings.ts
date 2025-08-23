@@ -28,7 +28,7 @@ export const getSettings = query({
 // Update user settings
 export const updateSettings = mutation({
   args: {
-    activeTab: v.optional(v.union(v.literal("trading"), v.literal("poker"), v.literal("polymarket"))),
+    activeTab: v.optional(v.union(v.literal("trading"), v.literal("poker"), v.literal("polymarket"), v.literal("credits"))),
     leftSidebarCollapsed: v.optional(v.boolean()),
     rightSidebarCollapsed: v.optional(v.boolean()),
     polymarketUnhingedMode: v.optional(v.boolean()),

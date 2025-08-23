@@ -13,6 +13,7 @@ import type {
   FilterApi,
   FunctionReference,
 } from "convex/server";
+import type * as credits from "../credits.js";
 import type * as poker from "../poker.js";
 import type * as polymarket from "../polymarket.js";
 import type * as trading from "../trading.js";
@@ -27,6 +28,7 @@ import type * as userSettings from "../userSettings.js";
  * ```
  */
 declare const fullApi: ApiFromModules<{
+  credits: typeof credits;
   poker: typeof poker;
   polymarket: typeof polymarket;
   trading: typeof trading;

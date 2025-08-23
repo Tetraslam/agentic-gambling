@@ -34,17 +34,19 @@ interface Credits {
 export default function CreditsDisplay({ userId }: CreditsDisplayProps) {
   const [showTransactions, setShowTransactions] = useState(false);
   
-  // Temporary fallback until Convex regenerates API with credits module
-  // TODO: Replace with actual API calls once `pnpm convex dev` regenerates the API
-  const credits: Credits = {
-    totalProfits: 0,
-    platformShare: 0,
-    userShare: 0,
-    tradingProfits: 0,
-    pokerProfits: 0,
-    polymarketProfits: 0,
-  }; // useQuery(api.credits.getUserCredits, { userId });
-  const transactions: Transaction[] = []; // useQuery(api.credits.getTransactions, { userId, limit: 20 });
+  // Get reactive data from Convex
+  const credits = useQuery(api.credits.getUserCredits, { userId });
+  const transactions = useQuery(api.credits.getTransactions, { userId, limit: 20 });
+
+  if (!credits) {
+    return (
+      <div className="space-y-4">
+        <div className="text-center py-8">
+          <p className="text-muted-foreground">Loading your profits...</p>
+        </div>
+      </div>
+    );
+  }
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -172,7 +174,7 @@ export default function CreditsDisplay({ userId }: CreditsDisplayProps) {
           <CardContent>
             <ScrollArea className="h-64">
               <div className="space-y-2">
-                {transactions?.map((transaction: Transaction, index: number) => (
+                {(transactions || []).map((transaction: Transaction, index: number) => (
                   <div key={index} className="flex items-center justify-between p-2 rounded border">
                     <div className="flex items-center gap-2">
                       {transaction.type === 'profit' ? (

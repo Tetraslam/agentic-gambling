@@ -15,18 +15,6 @@ export const getUserCredits = query({
       .first();
 
     if (!credits) {
-      // Create initial credits record
-      await ctx.db.insert("userCredits", {
-        userId: args.userId,
-        totalProfits: 0,
-        platformShare: 0,
-        userShare: 0,
-        tradingProfits: 0,
-        pokerProfits: 0,
-        polymarketProfits: 0,
-        lastUpdated: Date.now(),
-      });
-
       return {
         totalProfits: 0,
         platformShare: 0,
@@ -38,6 +26,30 @@ export const getUserCredits = query({
     }
 
     return credits;
+  },
+});
+
+// Initialize user credits (mutation)
+export const initializeUserCredits = mutation({
+  args: { userId: v.string() },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("userCredits")
+      .filter((q) => q.eq(q.field("userId"), args.userId))
+      .first();
+
+    if (existing) return existing._id;
+
+    return await ctx.db.insert("userCredits", {
+      userId: args.userId,
+      totalProfits: 0,
+      platformShare: 0,
+      userShare: 0,
+      tradingProfits: 0,
+      pokerProfits: 0,
+      polymarketProfits: 0,
+      lastUpdated: Date.now(),
+    });
   },
 });
 
@@ -65,17 +77,7 @@ export const recordTransaction = mutation({
       .first();
 
     if (!credits) {
-      credits = {
-        _id: await ctx.db.insert("userCredits", {
-          userId: args.userId,
-          totalProfits: 0,
-          platformShare: 0,
-          userShare: 0,
-          tradingProfits: 0,
-          pokerProfits: 0,
-          polymarketProfits: 0,
-          lastUpdated: Date.now(),
-        }),
+      const creditsId = await ctx.db.insert("userCredits", {
         userId: args.userId,
         totalProfits: 0,
         platformShare: 0,
@@ -84,7 +86,11 @@ export const recordTransaction = mutation({
         pokerProfits: 0,
         polymarketProfits: 0,
         lastUpdated: Date.now(),
-      };
+      });
+      
+      // Fetch the newly created credits
+      credits = await ctx.db.get(creditsId);
+      if (!credits) throw new Error("Failed to create credits");
     }
 
     let newTotalProfits = credits.totalProfits;
@@ -222,6 +228,7 @@ export const calculateProfit = mutation({
   handler: async (ctx, args) => {
     const profit = args.finalAmount - args.initialAmount;
     
+    // Insert transaction record
     await ctx.db.insert("transactions", {
       userId: args.userId,
       type: profit > 0 ? "profit" : "loss",
@@ -232,15 +239,83 @@ export const calculateProfit = mutation({
       relatedOrderId: args.relatedOrderId,
     });
 
-    // Update credits
-    await recordTransaction(ctx, {
-      userId: args.userId,
-      type: profit > 0 ? "profit" : "loss",
-      category: args.category,
-      amount: profit,
-      description: args.description,
-      relatedOrderId: args.relatedOrderId,
-    });
+    // Update user credits (inline logic from recordTransaction)
+    let credits = await ctx.db
+      .query("userCredits")
+      .filter((q) => q.eq(q.field("userId"), args.userId))
+      .first();
+
+    if (!credits) {
+      const creditsId = await ctx.db.insert("userCredits", {
+        userId: args.userId,
+        totalProfits: 0,
+        platformShare: 0,
+        userShare: 0,
+        tradingProfits: 0,
+        pokerProfits: 0,
+        polymarketProfits: 0,
+        lastUpdated: Date.now(),
+      });
+      
+      credits = await ctx.db.get(creditsId);
+      if (!credits) throw new Error("Failed to create credits");
+    }
+
+    let newTotalProfits = credits.totalProfits;
+    let newCategoryProfits = 0;
+
+    // Update category-specific profits
+    switch (args.category) {
+      case "trading":
+        newCategoryProfits = credits.tradingProfits + profit;
+        break;
+      case "poker":
+        newCategoryProfits = credits.pokerProfits + profit;
+        break;
+      case "polymarket":
+        newCategoryProfits = credits.polymarketProfits + profit;
+        break;
+    }
+
+    // Only apply platform fee on profits, not losses
+    if (profit > 0) {
+      newTotalProfits += profit;
+      const platformFee = profit * PLATFORM_FEE_PERCENTAGE;
+      const userProfit = profit - platformFee;
+
+      // Update credits
+      await ctx.db.patch(credits._id, {
+        totalProfits: newTotalProfits,
+        platformShare: credits.platformShare + platformFee,
+        userShare: credits.userShare + userProfit,
+        [args.category + "Profits"]: newCategoryProfits,
+        lastUpdated: Date.now(),
+      });
+
+      // Record platform fee transaction
+      await ctx.db.insert("transactions", {
+        userId: args.userId,
+        type: "platform_fee",
+        category: args.category,
+        amount: platformFee,
+        description: `Platform fee (${(PLATFORM_FEE_PERCENTAGE * 100)}%) on ${args.description}`,
+        timestamp: Date.now(),
+        relatedOrderId: args.relatedOrderId,
+      });
+
+      // Update platform revenue
+      await updatePlatformRevenue(ctx, args.category, platformFee);
+    } else {
+      // For losses, just update totals
+      newTotalProfits += profit; // profit will be negative for losses
+      
+      await ctx.db.patch(credits._id, {
+        totalProfits: newTotalProfits,
+        userShare: credits.userShare + profit,
+        [args.category + "Profits"]: newCategoryProfits,
+        lastUpdated: Date.now(),
+      });
+    }
 
     return profit;
   },
