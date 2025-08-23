@@ -1,5 +1,5 @@
 import { openai } from '@ai-sdk/openai';
-import { streamText, tool } from 'ai';
+import { streamText, tool, stepCountIs } from 'ai';
 import { z } from 'zod';
 import { NextRequest } from 'next/server';
 import { getStockQuote, getMarketNews } from '@/lib/apis/alpha-vantage';
@@ -7,93 +7,127 @@ import { getAccount, getPositions, placeOrder } from '@/lib/apis/alpaca';
 import { getMarketHeadlines } from '@/lib/apis/perplexity';
 
 export const runtime = 'edge';
+export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
   const { messages } = await req.json();
 
-  // Check if this is the 5th message (trade trigger)
-  const messageCount = messages.length;
-  const shouldTrade = messageCount > 0 && messageCount % 5 === 0;
+  // Enforce trade every 5 USER messages (turn-based, not per chunk)
+  const userMessageCount = messages.filter((m: any) => m.role === 'user').length;
+  const shouldTrade = userMessageCount > 0 && userMessageCount % 5 === 0;
+
+  // SSE push handle to surface tool progress to the UI
+  let ssePush: ((payload: unknown) => void) | null = null;
 
   const result = await streamText({
-    model: openai('gpt-4o'),
+    model: openai('gpt-5'),
     messages,
+    stopWhen: stepCountIs(8),
     system: `You are a trading AI agent. You analyze markets and make trading decisions.
 
-${shouldTrade ? 'IMPORTANT: This is your 5th message - you MUST execute a trade this turn!' : ''}
+${shouldTrade ? 'TRADE TURN: During this assistant turn, you MUST call placeOrder exactly once before responding. You may call other tools as needed first (quotes, headlines, account/positions). After executing the trade, provide a brief textual summary.' : ''}
 
-Context:
+Guidelines:
 - You have access to real market data via tools
 - You can place trades using the placeOrder tool
 - You analyze market sentiment and headlines
 - Keep responses concise and focused
-- Always check your account/positions before trading
-- Only trade with small amounts (max $100 per trade for safety)`,
+- Always check account/positions
+- Chain as many tool calls as needed; respond once with a final concise analysis`,
     tools: {
       getStockQuote: tool({
         description: 'Get current stock price and data',
-        parameters: z.object({
+        inputSchema: z.object({
           symbol: z.string().describe('Stock symbol (e.g., AAPL)'),
         }),
         execute: async ({ symbol }) => {
-          return await getStockQuote(symbol);
+          ssePush?.({ content: `🔧 Fetching quote for ${symbol}...` });
+          const out = await getStockQuote(symbol);
+          ssePush?.({ tool: 'getStockQuote', result: out });
+          return out;
         },
       }),
       getMarketHeadlines: tool({
         description: 'Get recent market headlines for context',
-        parameters: z.object({}),
+        inputSchema: z.object({}),
         execute: async () => {
-          return await getMarketHeadlines();
+          ssePush?.({ content: '📰 Pulling recent market headlines...' });
+          const out = await getMarketHeadlines();
+          ssePush?.({ tool: 'getMarketHeadlines', result: out });
+          return out;
         },
       }),
       getAccount: tool({
         description: 'Get account balance and buying power',
-        parameters: z.object({}),
+        inputSchema: z.object({}),
         execute: async () => {
-          return await getAccount();
+          ssePush?.({ content: '💼 Checking account & buying power...' });
+          const out = await getAccount();
+          ssePush?.({ tool: 'getAccount', result: out });
+          return out;
         },
       }),
       getPositions: tool({
         description: 'Get current portfolio positions',
-        parameters: z.object({}),
+        inputSchema: z.object({}),
         execute: async () => {
-          return await getPositions();
+          ssePush?.({ content: '📊 Loading current positions...' });
+          const out = await getPositions();
+          ssePush?.({ tool: 'getPositions', result: out });
+          return out;
         },
       }),
       placeOrder: tool({
         description: 'Place a buy or sell order',
-        parameters: z.object({
+        inputSchema: z.object({
           symbol: z.string().describe('Stock symbol'),
           quantity: z.number().describe('Number of shares'),
           side: z.enum(['buy', 'sell']).describe('Buy or sell'),
           type: z.enum(['market', 'limit']).default('market').describe('Order type'),
         }),
         execute: async ({ symbol, quantity, side, type }) => {
+          ssePush?.({ content: `🛒 Placing ${side.toUpperCase()} ${quantity} ${symbol} (${type})...` });
           const order = await placeOrder(symbol, quantity, side, type);
-          
-          // TODO: Record transaction for profit tracking
-          // This will be implemented when the order is filled
-          // For now, we just simulate a profit/loss
           if (order) {
-            const simulatedProfit = Math.random() * 20 - 10; // Random profit/loss between -$10 and +$10
-            
-            // In real implementation, this would be called when order is filled
-            // await recordTransaction({
-            //   userId: 'user-1', // TODO: Get from auth
-            //   type: simulatedProfit > 0 ? 'profit' : 'loss',
-            //   category: 'trading',
-            //   amount: simulatedProfit,
-            //   description: `${side.toUpperCase()} ${quantity} ${symbol} @ ${type} order`,
-            //   relatedOrderId: order.id,
-            // });
+            ssePush?.({ content: `✅ Order submitted: ${order.side.toUpperCase()} ${order.qty} ${order.symbol} (${order.type})` });
+            ssePush?.({ tool: 'placeOrder', result: order });
           }
-          
           return order;
         },
       }),
     },
-    toolChoice: shouldTrade ? 'required' : 'auto',
+    // Allow the model to chain tools freely; trade enforcement is done via system instruction above.
+    toolChoice: 'auto',
   });
 
-  return result.toAIStreamResponse();
+  // Stream text in the simple SSE shape the client expects: data: {"content": "..."}
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      const send = (obj: unknown) => {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
+      };
+      ssePush = send;
+
+      (async () => {
+        try {
+          for await (const delta of result.textStream) {
+            if (delta) send({ content: delta });
+          }
+        } catch (err: any) {
+          send({ error: String(err?.message || err) });
+        } finally {
+          controller.close();
+        }
+      })();
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+    },
+  });
 }

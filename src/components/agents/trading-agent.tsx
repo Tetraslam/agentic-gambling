@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { TrendingUp, Send } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 interface Message {
   id: string;
@@ -19,6 +19,7 @@ export default function TradingAgent() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
   
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -75,6 +76,17 @@ export default function TradingAgent() {
                 setMessages(prev => prev.map(m => 
                   m.id === aiMessage.id ? { ...m, content: fullContent } : m
                 ));
+                // autoscroll as content streams
+                scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+              }
+              if (data.tool) {
+                // optional: render tool outputs inline
+                setMessages(prev => prev.map(m => 
+                  m.id === aiMessage.id 
+                    ? { ...m, toolInvocations: [...(m.toolInvocations || []), { toolName: data.tool, result: data.result }] }
+                    : m
+                ));
+                scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
               }
             } catch (e) {
               // Ignore parse errors for streaming data
@@ -105,35 +117,37 @@ export default function TradingAgent() {
   const willTriggerTrade = messagesUntilTrade === 1;
 
   return (
-    <div className="flex flex-col h-full p-2">
+    <div className="flex flex-col h-full">
       {/* Header */}
-      <Card className="mb-2">
-        <CardContent className="p-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className={`w-2 h-2 rounded-full ${isLoading ? 'bg-yellow-500 animate-pulse' : 'bg-green-500'}`} />
-              <span className="text-xs font-medium">
-                {isLoading ? 'Trading...' : 'Ready'}
-              </span>
-            </div>
-            
-            <div className="flex gap-1">
-              <Badge variant="outline" className="text-xs">
-                {messages.length} msgs
-              </Badge>
-              {willTriggerTrade && (
-                <Badge variant="destructive" className="text-xs animate-pulse">
-                  <TrendingUp className="w-2 h-2 mr-1" />
-                  Trade Ready!
+      <div className="flex-shrink-0 p-2 pb-0">
+        <Card className="mb-2">
+          <CardContent className="p-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className={`w-2 h-2 rounded-full ${isLoading ? 'bg-yellow-500 animate-pulse' : 'bg-green-500'}`} />
+                <span className="text-xs font-medium">
+                  {isLoading ? 'Trading...' : 'Ready'}
+                </span>
+              </div>
+              
+              <div className="flex gap-1">
+                <Badge variant="outline" className="text-xs">
+                  {messages.length} msgs
                 </Badge>
-              )}
+                {willTriggerTrade && (
+                  <Badge variant="destructive" className="text-xs animate-pulse">
+                    <TrendingUp className="w-2 h-2 mr-1" />
+                    Trade Ready!
+                  </Badge>
+                )}
+              </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
 
-      {/* Messages */}
-      <ScrollArea className="flex-1 mb-2">
+      {/* Messages - SCROLLABLE ONLY */}
+      <div className="flex-1 overflow-y-auto px-2 pb-2" ref={scrollRef}>
         <div className="space-y-2">
           {messages.length === 0 ? (
             <div className="text-center py-6">
@@ -184,10 +198,11 @@ export default function TradingAgent() {
             </div>
           )}
         </div>
-      </ScrollArea>
+      </div>
 
-      {/* Input */}
-      <div className="space-y-2">
+      {/* Input - COMPLETELY SEPARATE FIXED BOTTOM */}
+      <div className="flex-shrink-0 border-t bg-background p-2">
+        <div className="space-y-2">
         <form onSubmit={handleSubmit} className="flex gap-2">
           <Input
             value={input}
@@ -207,6 +222,7 @@ export default function TradingAgent() {
             ⚠️ Next message triggers a trade!
           </div>
         )}
+        </div>
       </div>
     </div>
   );
