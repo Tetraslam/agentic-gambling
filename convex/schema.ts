@@ -58,10 +58,11 @@ export default defineSchema({
       position: v.union(v.literal("yes"), v.literal("no")),
       amount: v.number(),
       odds: v.optional(v.number()),
+      isDemo: v.optional(v.boolean()), // Track demo vs real in messages too
     })),
   }),
 
-  // Polymarket active bets
+  // Polymarket active bets - UPDATED WITH DEMO/REAL TRACKING
   polymarketBets: defineTable({
     market: v.string(),
     position: v.union(v.literal("yes"), v.literal("no")),
@@ -69,6 +70,10 @@ export default defineSchema({
     odds: v.optional(v.number()),
     timestamp: v.number(),
     isActive: v.boolean(),
+    isDemo: v.optional(v.boolean()), // Track demo vs real trades
+    transactionId: v.optional(v.string()), // Real trade transaction hash
+    status: v.optional(v.string()), // pending, confirmed, failed, etc.
+    marketId: v.optional(v.string()), // External market ID for real trades
   }),
 
   // User preferences and settings
@@ -78,6 +83,7 @@ export default defineSchema({
     leftSidebarCollapsed: v.boolean(),
     rightSidebarCollapsed: v.boolean(),
     polymarketUnhingedMode: v.boolean(),
+    polymarketDemoMode: v.optional(v.boolean()),
     tradingBalance: v.number(),
     polymarketBalance: v.number(),
   }),
