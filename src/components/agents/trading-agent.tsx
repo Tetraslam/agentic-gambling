@@ -1,110 +1,43 @@
 'use client';
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { useState } from 'react';
-import { Send, TrendingUp } from 'lucide-react';
-import { useQuery, useMutation } from "convex/react";
-import { api } from "../../../convex/_generated/api";
+import { useChat } from 'ai/react';
+import { TrendingUp, Send } from 'lucide-react';
 
 export default function TradingAgent() {
-  const [input, setInput] = useState('');
-  const [isThinking, setIsThinking] = useState(false);
+  const { messages, input, handleInputChange, handleSubmit, isLoading } = useChat({
+    api: '/api/chat/trading',
+  });
 
-  // Get reactive data from Convex
-  const messages = useQuery(api.trading.getMessages) || [];
-  const messageCount = useQuery(api.trading.getMessageCount) || 0;
-  const addMessage = useMutation(api.trading.addMessage);
-
-  const shouldTrade = messageCount > 0 && messageCount % 5 === 0;
-
-  const handleSend = async () => {
-    if (!input.trim()) return;
-
-    const userMessage = input.trim();
-    setInput('');
-    
-    // Add user message
-    await addMessage({
-      role: 'user',
-      content: userMessage,
-    });
-
-    setIsThinking(true);
-
-    // Simulate agent thinking
-    setTimeout(async () => {
-      const responses = [
-        "Looking at the charts, I see some interesting patterns...",
-        "Market sentiment seems bullish today. RSI is showing oversold conditions.",
-        "The technicals are suggesting a potential breakout.",
-        "Volume is picking up, might be time for a position.",
-        "Fed minutes came out hawkish, adjusting strategy accordingly.",
-      ];
-
-      const randomResponse = responses[Math.floor(Math.random() * responses.length)];
-      
-      let tradeAction = undefined;
-      
-      // Execute trade every 5th message
-      if (shouldTrade) {
-        const symbols = ['AAPL', 'TSLA', 'SPY', 'QQQ', 'MSFT', 'GOOGL'];
-        const actions = ['buy', 'sell'] as const;
-        const symbol = symbols[Math.floor(Math.random() * symbols.length)];
-        const action = actions[Math.floor(Math.random() * actions.length)];
-        const quantity = Math.floor(Math.random() * 100) + 1;
-        
-        tradeAction = {
-          action,
-          symbol,
-          quantity,
-          price: Math.random() * 500 + 50, // Random price
-        };
-      }
-
-      await addMessage({
-        role: 'assistant',
-        content: shouldTrade 
-          ? `${randomResponse} I'm executing a trade: ${tradeAction?.action.toUpperCase()} ${tradeAction?.quantity} shares of ${tradeAction?.symbol} at $${tradeAction?.price?.toFixed(2)}`
-          : randomResponse,
-        tradeAction,
-      });
-
-      setIsThinking(false);
-    }, 1000 + Math.random() * 2000);
-  };
-
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
+  // Calculate messages until trade (every 5 messages)
+  const messagesUntilTrade = 5 - (messages.length % 5);
+  const willTriggerTrade = messagesUntilTrade === 1;
 
   return (
-    <div className="h-full flex flex-col p-4">
-      {/* Agent Status */}
-      <Card className="mb-4">
-        <CardContent className="pt-4">
+    <div className="flex flex-col h-full p-2">
+      {/* Header */}
+      <Card className="mb-2">
+        <CardContent className="p-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className={`w-3 h-3 rounded-full ${isThinking ? 'bg-yellow-500 animate-pulse' : 'bg-green-500'}`} />
-              <span className="text-sm font-medium">
-                {isThinking ? 'Analyzing...' : 'Ready'}
+              <div className={`w-2 h-2 rounded-full ${isLoading ? 'bg-yellow-500 animate-pulse' : 'bg-green-500'}`} />
+              <span className="text-xs font-medium">
+                {isLoading ? 'Trading...' : 'Ready'}
               </span>
             </div>
             
-            <div className="flex gap-2">
-              <Badge variant="outline">
-                {messageCount} messages
+            <div className="flex gap-1">
+              <Badge variant="outline" className="text-xs">
+                {messages.length} msgs
               </Badge>
-              {shouldTrade && (
-                <Badge variant="destructive" className="animate-pulse">
-                  <TrendingUp className="w-3 h-3 mr-1" />
-                  Trade Due!
+              {willTriggerTrade && (
+                <Badge variant="destructive" className="text-xs animate-pulse">
+                  <TrendingUp className="w-2 h-2 mr-1" />
+                  Trade Ready!
                 </Badge>
               )}
             </div>
@@ -113,66 +46,81 @@ export default function TradingAgent() {
       </Card>
 
       {/* Messages */}
-      <ScrollArea className="flex-1 mb-4">
-        <div className="space-y-4">
-          {messages.length === 0 && (
-            <div className="text-center text-muted-foreground py-8">
-              <p>👋 Hey! I'm your trading agent.</p>
-              <p className="text-sm mt-1">I'll execute a trade every 5 messages.</p>
+      <ScrollArea className="flex-1 mb-2">
+        <div className="space-y-2">
+          {messages.length === 0 ? (
+            <div className="text-center py-6">
+              <p className="text-muted-foreground text-xs">👋 I'm your trading agent!</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                I'll execute real trades every 5 messages
+              </p>
+            </div>
+          ) : (
+            messages.map((message) => (
+              <div
+                key={message.id}
+                className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+              >
+                <Card className={`max-w-[85%] ${
+                  message.role === 'user' 
+                    ? 'bg-primary text-primary-foreground' 
+                    : 'bg-muted'
+                }`}>
+                  <CardContent className="p-2">
+                    <p className="text-xs leading-relaxed">{message.content}</p>
+                    {message.toolInvocations && message.toolInvocations.length > 0 && (
+                      <div className="mt-2 pt-2 border-t border-border/50">
+                        {message.toolInvocations.map((tool, idx) => (
+                          <div key={idx} className="text-xs opacity-75 mb-1">
+                            <span className="font-medium">🔧 {tool.toolName}:</span>
+                            {tool.result && (
+                              <div className="mt-1 p-1 bg-background/20 rounded text-xs">
+                                {typeof tool.result === 'object' ? JSON.stringify(tool.result, null, 2) : tool.result}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            ))
+          )}
+          {isLoading && (
+            <div className="flex justify-start">
+              <Card className="bg-muted">
+                <CardContent className="p-2">
+                  <p className="text-xs text-muted-foreground">Agent analyzing markets...</p>
+                </CardContent>
+              </Card>
             </div>
           )}
-          
-          {messages.map((message) => (
-            <div
-              key={message._id}
-              className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-            >
-              <div
-                className={`max-w-[80%] rounded-lg px-3 py-2 ${
-                  message.role === 'user'
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted'
-                }`}
-              >
-                <p className="text-sm">{message.content}</p>
-                {message.tradeAction && (
-                  <div className="mt-2 p-2 bg-background/20 rounded text-xs">
-                    <div className="flex items-center gap-1">
-                      <TrendingUp className="w-3 h-3" />
-                      <span className="font-semibold">TRADE EXECUTED</span>
-                    </div>
-                    <div className="mt-1">
-                      {message.tradeAction.action.toUpperCase()} {message.tradeAction.quantity} {message.tradeAction.symbol} @ ${message.tradeAction.price?.toFixed(2)}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
         </div>
       </ScrollArea>
 
       {/* Input */}
-      <div className="flex gap-2">
-        <Input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyPress={handleKeyPress}
-          placeholder="Ask about markets, strategies, or just chat..."
-          disabled={isThinking}
-          className="flex-1"
-        />
-        <Button onClick={handleSend} disabled={!input.trim() || isThinking}>
-          <Send className="w-4 h-4" />
-        </Button>
+      <div className="space-y-2">
+        <form onSubmit={handleSubmit} className="flex gap-2">
+          <Input
+            value={input}
+            onChange={handleInputChange}
+            placeholder="Ask about markets..."
+            disabled={isLoading}
+            className="flex-1 text-xs h-8"
+          />
+          <Button type="submit" disabled={!input.trim() || isLoading} size="sm" className="h-8 px-3">
+            <Send className="w-3 h-3" />
+          </Button>
+        </form>
+        
+        {/* Trade Warning */}
+        {willTriggerTrade && (
+          <div className="p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800">
+            ⚠️ Next message triggers a trade!
+          </div>
+        )}
       </div>
-
-      {/* Trade Counter Warning */}
-      {messageCount > 0 && messageCount % 5 === 4 && (
-        <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800">
-          ⚠️ Next message will trigger a trade!
-        </div>
-      )}
     </div>
   );
 }

@@ -19,6 +19,7 @@ import RightSidebar from './right-sidebar';
 import TradingTab from '../tabs/trading-tab';
 import PokerTab from '../tabs/poker-tab';
 import PolymarketTab from '../tabs/polymarket-tab';
+import CreditsDisplay from '../credits/credits-display';
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 
@@ -46,6 +47,7 @@ export default function MainLayout() {
                   <TabsTrigger value="trading">📈 Trading</TabsTrigger>
                   <TabsTrigger value="poker">🃏 Poker</TabsTrigger>
                   <TabsTrigger value="polymarket">🎲 Polymarket</TabsTrigger>
+                  <TabsTrigger value="credits">💰 Credits</TabsTrigger>
                 </TabsList>
 
                 <div className="flex-1 p-2">
@@ -57,6 +59,11 @@ export default function MainLayout() {
                   </TabsContent>
                   <TabsContent value="polymarket" className="h-full">
                     <PolymarketTab />
+                  </TabsContent>
+                  <TabsContent value="credits" className="h-full">
+                    <div className="p-4">
+                      <CreditsDisplay userId="user-1" />
+                    </div>
                   </TabsContent>
                 </div>
               </Tabs>

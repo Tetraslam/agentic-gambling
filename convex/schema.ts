@@ -66,11 +66,44 @@ export default defineSchema({
   // User preferences and settings
   userSettings: defineTable({
     userId: v.string(),
-    activeTab: v.union(v.literal("trading"), v.literal("poker"), v.literal("polymarket")),
+    activeTab: v.union(v.literal("trading"), v.literal("poker"), v.literal("polymarket"), v.literal("credits")),
     leftSidebarCollapsed: v.boolean(),
     rightSidebarCollapsed: v.boolean(),
     polymarketUnhingedMode: v.boolean(),
     tradingBalance: v.number(),
     polymarketBalance: v.number(),
+  }),
+
+  // Credits and profit tracking
+  userCredits: defineTable({
+    userId: v.string(),
+    totalProfits: v.number(), // Total profits earned
+    platformShare: v.number(), // Platform's cut of profits
+    userShare: v.number(), // User's remaining profits after platform cut
+    tradingProfits: v.number(), // Profits from trading
+    pokerProfits: v.number(), // Profits from poker
+    polymarketProfits: v.number(), // Profits from polymarket
+    lastUpdated: v.number(),
+  }),
+
+  // Transaction history for profit tracking
+  transactions: defineTable({
+    userId: v.string(),
+    type: v.union(v.literal("profit"), v.literal("loss"), v.literal("platform_fee")),
+    category: v.union(v.literal("trading"), v.literal("poker"), v.literal("polymarket")),
+    amount: v.number(),
+    description: v.string(),
+    timestamp: v.number(),
+    relatedOrderId: v.optional(v.string()), // For linking to trades/bets
+  }),
+
+  // Platform revenue tracking
+  platformRevenue: defineTable({
+    totalRevenue: v.number(),
+    tradingRevenue: v.number(),
+    pokerRevenue: v.number(),
+    polymarketRevenue: v.number(),
+    userCount: v.number(),
+    lastUpdated: v.number(),
   }),
 });

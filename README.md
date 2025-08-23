@@ -52,8 +52,18 @@ Free platform that lets AI agents trade/bet/gamble for you. We take a % of profi
 ## 🏃‍♂️ Quick Start
 
 ```bash
+# Install dependencies
 pnpm install
+pnpm add ai @ai-sdk/openai axios
+
+# Set up environment (see ENVIRONMENT.md)
+cp .env.local.example .env.local
+# Add your API keys to .env.local
+
+# Start Convex backend
 pnpm convex dev
+
+# Start Next.js app
 pnpm dev
 ```
 
