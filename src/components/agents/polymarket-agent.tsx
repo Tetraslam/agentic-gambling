@@ -9,10 +9,12 @@ import { useState, useEffect } from 'react';
 import { Send, Zap, TrendingUp, TrendingDown, Flame } from 'lucide-react';
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
+import { getRandomMarkets, SimplifiedMarket } from '@/lib/apis/polymarket';
 
 export default function PolymarketAgent() {
   const [input, setInput] = useState('');
   const [isThinking, setIsThinking] = useState(false);
+  const [availableMarkets, setAvailableMarkets] = useState<SimplifiedMarket[]>([]);
 
   // Get reactive data from Convex
   const messages = useQuery(api.polymarket.getMessages) || [];
@@ -24,10 +26,38 @@ export default function PolymarketAgent() {
 
   const balance = settings?.polymarketBalance || 10000;
   const unhingedMode = settings?.polymarketUnhingedMode ?? true;
+
+  // Load markets for trading
+  useEffect(() => {
+    const loadMarkets = async () => {
+      try {
+        const markets = await getRandomMarkets(20);
+        setAvailableMarkets(markets);
+      } catch (error) {
+        console.error('Failed to load markets for agent:', error);
+        // Fallback to demo markets
+        setAvailableMarkets([
+          {
+            id: 'demo-1',
+            question: "Will Bitcoin hit $100k by end of 2024?",
+            yesPrice: 0.73,
+            noPrice: 0.27,
+            volume: "$2.1M",
+            category: "Crypto",
+            endDate: "2024-12-31T23:59:59Z",
+            description: "Demo market",
+            slug: "bitcoin-100k-2024",
+            closed: false
+          }
+        ]);
+      }
+    };
+    loadMarkets();
+  }, []);
   
   // Auto-trade when unhinged (random intervals)
   useEffect(() => {
-    if (!unhingedMode) return;
+    if (!unhingedMode || availableMarkets.length === 0) return;
     
     const randomInterval = Math.random() * 30000 + 10000; // 10-40 seconds
     const timeout = setTimeout(() => {
@@ -37,29 +67,27 @@ export default function PolymarketAgent() {
     }, randomInterval);
 
     return () => clearTimeout(timeout);
-  }, [messages, unhingedMode]);
+  }, [messages, unhingedMode, availableMarkets]);
 
   const executeRandomTrade = async () => {
-    const markets = [
-      "Will Bitcoin hit $100k by end of 2024?",
-      "Will AI replace 50% of jobs by 2030?",
-      "Will there be a recession in 2024?",
-      "Will Elon buy Twitter again?",
-      "Will Trump run for president in 2024?",
-      "Will we find aliens in 2024?",
-      "Will ChatGPT pass the Turing test?",
-      "Will TikTok get banned in the US?",
-    ];
+    // Use real markets if available, otherwise fallback to demo data
+    if (availableMarkets.length === 0) {
+      console.log('No markets available for trading yet');
+      return;
+    }
 
-    const market = markets[Math.floor(Math.random() * markets.length)];
+    const market = availableMarkets[Math.floor(Math.random() * availableMarkets.length)];
     const position = Math.random() > 0.5 ? 'yes' : 'no';
     const amount = Math.floor(Math.random() * 500) + 50;
     
+    // Use actual market prices for more realistic demo
+    const odds = position === 'yes' ? market.yesPrice : market.noPrice;
+    
     const betAction = {
-      market,
+      market: market.question,
       position: position as 'yes' | 'no',
       amount,
-      odds: Math.random() * 0.8 + 0.1,
+      odds,
     };
 
     const unhingedResponses = [
@@ -77,7 +105,7 @@ export default function PolymarketAgent() {
 
     await addMessage({
       role: 'assistant',
-      content: `${response} Placed ${amount} on ${position.toUpperCase()} for "${market}"`,
+      content: `${response} Placed $${amount} on ${position.toUpperCase()} for "${market.question}" (${market.category} market, ${market.volume} volume)`,
       betAction,
     });
 
