@@ -7,6 +7,9 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { TrendingUp, Send } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { useQuery, useMutation } from 'convex/react';
+import { api } from '../../../convex/_generated/api';
+import { useTradingStore } from '@/lib/stores/trading-store';
 
 interface Message {
   id: string;
@@ -16,33 +19,50 @@ interface Message {
 }
 
 export default function TradingAgent() {
-  const [messages, setMessages] = useState<Message[]>([]);
+  // Load messages from Convex
+  const convexMessages = useQuery(api.trading.getMessages) || [];
+  const addMessage = useMutation(api.trading.addMessage);
+  const { setCurrentSymbol } = useTradingStore();
+  
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [localMessages, setLocalMessages] = useState<Message[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Convert Convex messages to local format and combine with streaming messages
+  const messages = [
+    ...convexMessages.map(msg => ({
+      id: msg._id,
+      role: msg.role as 'user' | 'assistant',
+      content: msg.content,
+      toolInvocations: []
+    })).reverse(), // Convex returns newest first, we want oldest first
+    ...localMessages
+  ];
   
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim()) return;
     
-    const userMessage: Message = { 
-      id: Date.now().toString(), 
-      role: 'user', 
-      content: input 
-    };
-    setMessages(prev => [...prev, userMessage]);
+    const userContent = input;
     setInput('');
     setIsLoading(true);
-    
+
     try {
-      // Call the actual API route
+      // Save user message to Convex
+      await addMessage({ role: 'user', content: userContent });
+      
+      // Clear any local streaming messages
+      setLocalMessages([]);
+
+      // Call the actual API route with all existing messages + new user message
+      const allMessages = [...messages.map(m => ({ role: m.role, content: m.content })), { role: 'user' as const, content: userContent }];
+      
       const response = await fetch('/api/chat/trading', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          messages: [...messages, userMessage].map(m => ({ role: m.role, content: m.content }))
-        }),
+        body: JSON.stringify({ messages: allMessages }),
       });
       
       if (!response.ok) throw new Error('API call failed');
@@ -51,14 +71,16 @@ export default function TradingAgent() {
       const reader = response.body?.getReader();
       if (!reader) throw new Error('No reader available');
       
+      const aiMessageId = (Date.now() + 1).toString();
       const aiMessage: Message = {
-        id: (Date.now() + 1).toString(),
+        id: aiMessageId,
         role: 'assistant',
         content: '',
         toolInvocations: []
       };
       
-      setMessages(prev => [...prev, aiMessage]);
+      // Add streaming message locally
+      setLocalMessages([aiMessage]);
       
       let fullContent = '';
       while (true) {
@@ -74,16 +96,16 @@ export default function TradingAgent() {
               const data = JSON.parse(line.slice(6));
               if (data.content) {
                 fullContent += data.content;
-                setMessages(prev => prev.map(m => 
-                  m.id === aiMessage.id ? { ...m, content: fullContent } : m
+                setLocalMessages(prev => prev.map(m => 
+                  m.id === aiMessageId ? { ...m, content: fullContent } : m
                 ));
                 // autoscroll as content streams
                 scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
               }
               if (data.tool) {
                 // optional: render tool outputs inline
-                setMessages(prev => prev.map(m => 
-                  m.id === aiMessage.id 
+                setLocalMessages(prev => prev.map(m => 
+                  m.id === aiMessageId 
                     ? { ...m, toolInvocations: [...(m.toolInvocations || []), { toolName: data.tool, result: data.result }] }
                     : m
                 ));
@@ -96,14 +118,24 @@ export default function TradingAgent() {
         }
       }
       
+      // Save final assistant message to Convex
+      if (fullContent.trim()) {
+        await addMessage({ role: 'assistant', content: fullContent.trim() });
+        setLocalMessages([]); // Clear local streaming message
+      }
+      
     } catch (error) {
       console.error('Trading agent error:', error);
-      const errorMessage: Message = { 
-        id: (Date.now() + 1).toString(),
-        role: 'assistant', 
-        content: `🔧 Trading API connected! Error: ${error}. Check your API keys in .env.local` 
-      };
-      setMessages(prev => [...prev, errorMessage]);
+      // Save error message to Convex (with error handling)
+      try {
+        await addMessage({ 
+          role: 'assistant', 
+          content: `🔧 Trading API connected! Error: ${error}. Check your API keys in .env.local` 
+        });
+      } catch (convexError) {
+        console.error('Failed to save error message to Convex:', convexError);
+      }
+      setLocalMessages([]);  // Clear any local streaming messages
     } finally {
       setIsLoading(false);
       // Auto-focus input after response

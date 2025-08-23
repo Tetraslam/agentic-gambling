@@ -5,6 +5,11 @@ import { NextRequest } from 'next/server';
 import { getStockQuote, getMarketNews } from '@/lib/apis/alpha-vantage';
 import { getAccount, getPositions, placeOrder } from '@/lib/apis/alpaca';
 import { getMarketHeadlines } from '@/lib/apis/perplexity';
+import { ConvexHttpClient } from "convex/browser";
+import { api } from "@/convex/_generated/api";
+
+// Initialize Convex client for server-side usage
+const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
 
 export const runtime = 'edge';
 export const maxDuration = 60;
@@ -91,6 +96,22 @@ Your personality:
           if (order) {
             ssePush?.({ content: `✅ Order submitted: ${order.side.toUpperCase()} ${order.qty} ${order.symbol} (${order.type})` });
             ssePush?.({ tool: 'placeOrder', result: order });
+            
+            // Save trade action to Convex for portfolio tracking
+            try {
+              await convex.mutation(api.trading.addMessage, {
+                role: 'assistant',
+                content: `Trade executed: ${order.side.toUpperCase()} ${order.qty} ${order.symbol} at ${order.filled_price ? `$${order.filled_price}` : 'market price'}`,
+                tradeAction: {
+                  action: order.side as 'buy' | 'sell',
+                  symbol: order.symbol,
+                  quantity: parseFloat(order.qty.toString()),
+                  price: order.filled_price ? parseFloat(order.filled_price.toString()) : undefined,
+                }
+              });
+            } catch (convexError) {
+              console.error('Failed to save trade to Convex:', convexError);
+            }
           }
           return order;
         },

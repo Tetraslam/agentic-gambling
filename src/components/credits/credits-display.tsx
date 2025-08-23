@@ -37,6 +37,11 @@ export default function CreditsDisplay({ userId }: CreditsDisplayProps) {
   // Get reactive data from Convex
   const credits = useQuery(api.credits.getUserCredits, { userId });
   const transactions = useQuery(api.credits.getTransactions, { userId, limit: 20 });
+  
+  // Get trading data to show performance
+  const tradingPortfolio = useQuery(api.trading.getPortfolio);
+  const tradingMessages = useQuery(api.trading.getMessages);
+  const currentPL = useQuery(api.trading.getCurrentPL);
 
   if (!credits) {
     return (
@@ -60,45 +65,179 @@ export default function CreditsDisplay({ userId }: CreditsDisplayProps) {
     return new Date(timestamp).toLocaleString();
   };
 
+  // Calculate trading stats
+  const totalTrades = tradingMessages?.filter(msg => msg.tradeAction).length || 0;
+  const totalPositions = tradingPortfolio?.length || 0;
+  const portfolioValue = tradingPortfolio?.reduce((total, pos) => {
+    return total + (pos.quantity * pos.avgPrice);
+  }, 0) || 0;
+
+  // Calculate profit sharing from REAL Alpaca P&L data
+  const realTradingPL = currentPL?.totalUnrealizedPL || 0;
+  const realPortfolioValue = currentPL?.totalMarketValue || 0;
+  
+  // Total profits = real trading P&L + poker profits + polymarket profits
+  // For now, poker/polymarket are placeholders until implemented
+  const pokerPL = credits?.pokerProfits || 0; 
+  const polymarketPL = credits?.polymarketProfits || 0;
+  
+  const totalRealProfits = realTradingPL + pokerPL + polymarketPL;
+  const platformShare = Math.floor(Math.max(totalRealProfits, 0) * 0.80 * 100) / 100; // 80% of profits only
+  const userShare = Math.floor(Math.max(totalRealProfits, 0) * 0.20 * 100) / 100; // 20% user keeps
+  
+  // For display: show real data if we have profits, otherwise show $0
+  const displayTotalProfits = totalRealProfits;
+  const displayPlatformShare = platformShare;
+  const displayUserShare = userShare;
+
   return (
     <div className="space-y-4">
-      {/* Main Credits Overview */}
+      {/* Trading Performance */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="flex items-center gap-2">
+            <TrendingUp className="w-5 h-5" />
+            Trading Performance
+          </CardTitle>
+          <Badge variant="outline">
+            AI Agent Active
+          </Badge>
+        </CardHeader>
+        <CardContent>
+           <div className="grid grid-cols-4 gap-4">
+             <div className="text-center">
+               <p className="text-2xl font-bold">
+                 {totalTrades}
+               </p>
+               <p className="text-sm text-muted-foreground">Total Trades</p>
+             </div>
+             <div className="text-center">
+               <p className="text-2xl font-bold">
+                 {totalPositions}
+               </p>
+               <p className="text-sm text-muted-foreground">Active Positions</p>
+             </div>
+             <div className="text-center">
+               <p className="text-2xl font-bold">
+                 {formatCurrency(realPortfolioValue)}
+               </p>
+               <p className="text-sm text-muted-foreground">Portfolio Value</p>
+             </div>
+             <div className="text-center">
+               <p className={`text-2xl font-bold ${realTradingPL > 0 ? 'text-green-600' : realTradingPL < 0 ? 'text-red-600' : ''}`}>
+                 {formatCurrency(realTradingPL)}
+               </p>
+               <p className="text-sm text-muted-foreground">Unrealized P&L</p>
+             </div>
+           </div>
+          
+          {tradingPortfolio && tradingPortfolio.length > 0 && (
+            <div className="mt-4">
+              <h4 className="text-sm font-medium mb-2">Current Positions</h4>
+              <div className="space-y-2">
+                {tradingPortfolio.map((position, idx) => (
+                  <div key={idx} className="flex justify-between items-center p-2 bg-muted/20 rounded">
+                    <div>
+                      <span className="font-medium">{position.symbol}</span>
+                      <span className="text-sm text-muted-foreground ml-2">
+                        {position.quantity} shares @ ${position.avgPrice.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="text-sm font-medium">
+                      {formatCurrency(position.quantity * position.avgPrice)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Profit Sharing */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="flex items-center gap-2">
             <DollarSign className="w-5 h-5" />
-            Your Profits
+            Profit Sharing (80% Platform Fee)
           </CardTitle>
-          <Badge variant={credits.totalProfits > 0 ? 'default' : 'secondary'}>
-            {credits.totalProfits > 0 ? 'Profitable' : 'Starting Out'}
+          <Badge variant={totalRealProfits !== 0 ? 'destructive' : 'secondary'}>
+            {totalRealProfits !== 0 ? 'Real P&L Data' : 'No P&L Yet'}
           </Badge>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
+            <div className="text-center">
+              <p className="text-2xl font-bold text-red-600">
+                {formatCurrency(displayPlatformShare)}
+              </p>
+              <p className="text-sm text-muted-foreground">Platform Share (80%)</p>
+            </div>
             <div className="text-center">
               <p className="text-2xl font-bold text-green-600">
-                {formatCurrency(credits.userShare)}
+                {formatCurrency(displayUserShare)}
               </p>
-              <p className="text-sm text-muted-foreground">Your Share</p>
+              <p className="text-sm text-muted-foreground">Your Share (20%)</p>
             </div>
             <div className="text-center">
               <p className="text-2xl font-bold">
-                {formatCurrency(credits.totalProfits)}
+                {formatCurrency(displayTotalProfits)}
               </p>
-              <p className="text-sm text-muted-foreground">Total Generated</p>
+              <p className="text-sm text-muted-foreground">Total Profits Generated</p>
             </div>
           </div>
           
-          <Separator className="my-4" />
-          
-          <div className="text-center">
-            <p className="text-sm text-muted-foreground mb-1">
-              Platform Fee: {formatCurrency(credits.platformShare)}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              We take 80% of profits because we're basically a casino 🎰
-            </p>
+          <div className="mt-4 p-3 bg-muted/20 rounded-lg">
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Revenue Model:</span>
+              <span className="font-medium">We take 80%, you keep 20% of all AI profits</span>
+            </div>
+            <div className="flex items-center justify-between text-sm mt-2">
+              <span className="text-muted-foreground">Powered by:</span>
+              <span className="font-medium">Autumn (Billing) + Convex (Data)</span>
+            </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Agent Performance Breakdown */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <TrendingUp className="w-5 h-5" />
+            Performance by Agent
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-3 gap-4">
+             <div className="text-center p-3 bg-muted/20 rounded-lg">
+               <p className={`text-lg font-semibold ${realTradingPL > 0 ? 'text-green-600' : realTradingPL < 0 ? 'text-red-600' : 'text-muted-foreground'}`}>
+                 {formatCurrency(realTradingPL)}
+               </p>
+               <p className="text-sm text-muted-foreground">Trading Agent</p>
+               <Badge variant={realTradingPL > 0 ? "default" : "outline"} className="text-xs mt-1">
+                 {totalTrades} trades
+               </Badge>
+             </div>
+             <div className="text-center p-3 bg-muted/20 rounded-lg">
+               <p className="text-lg font-semibold text-muted-foreground">
+                 {formatCurrency(pokerPL)}
+               </p>
+               <p className="text-sm text-muted-foreground">Poker Agent</p>
+               <Badge variant="outline" className="text-xs mt-1">
+                 Coming Soon
+               </Badge>
+             </div>
+             <div className="text-center p-3 bg-muted/20 rounded-lg">
+               <p className="text-lg font-semibold text-muted-foreground">
+                 {formatCurrency(polymarketPL)}
+               </p>
+               <p className="text-sm text-muted-foreground">Polymarket Agent</p>
+               <Badge variant="outline" className="text-xs mt-1">
+                 Coming Soon
+               </Badge>
+             </div>
+           </div>
         </CardContent>
       </Card>
 

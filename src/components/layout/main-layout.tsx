@@ -16,6 +16,7 @@ import PolymarketTab from '../tabs/polymarket-tab';
 import CreditsDisplay from '../credits/credits-display';
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
+import { useEffect } from 'react';
 
 export default function MainLayout() {
   const settings = useQuery(api.userSettings.getSettings);
@@ -26,6 +27,23 @@ export default function MainLayout() {
   const toggleLeftSidebar = () => {
     updateSettings({ leftSidebarCollapsed: !leftSidebarCollapsed });
   };
+
+  // Initialize user with Autumn on first load
+  useEffect(() => {
+    const initializeAutumnUser = async () => {
+      try {
+        await fetch('/api/autumn/init-user', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: 'user' }),
+        });
+      } catch (error) {
+        console.error('Failed to initialize Autumn user:', error);
+      }
+    };
+
+    initializeAutumnUser();
+  }, []);
 
   return (
     <div className="flex h-screen w-full">
@@ -70,20 +88,18 @@ export default function MainLayout() {
                 <TabsTrigger value="credits">💰 Credits</TabsTrigger>
               </TabsList>
 
-              <div className="flex-1 p-2 overflow-auto">
-                <TabsContent value="trading" className="h-full overflow-auto">
+              <div className="flex-1">
+                <TabsContent value="trading" className="h-full p-2">
                   <TradingTab />
                 </TabsContent>
-                <TabsContent value="poker" className="h-full overflow-auto">
+                <TabsContent value="poker" className="h-full p-2">
                   <PokerTab />
                 </TabsContent>
-                <TabsContent value="polymarket" className="h-full overflow-auto">
+                <TabsContent value="polymarket" className="h-full p-2">
                   <PolymarketTab />
                 </TabsContent>
-                <TabsContent value="credits" className="h-full overflow-auto">
-                  <div className="p-4">
-                    <CreditsDisplay userId="user-1" />
-                  </div>
+                <TabsContent value="credits" className="h-full p-2">
+                  <CreditsDisplay userId="user-1" />
                 </TabsContent>
               </div>
             </Tabs>

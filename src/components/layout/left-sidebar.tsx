@@ -7,12 +7,12 @@ import { ChevronLeft } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 const BRAINROT_VIDEOS = [
-  'https://www.youtube.com/embed/tya7H3aeiVk',
-  'https://www.youtube.com/embed/KBx_4lxmi2Y', 
-  'https://www.youtube.com/embed/rKWCDRzRcMc',
-  'https://www.youtube.com/embed/J---aiyznGQ',
-  'https://www.youtube.com/embed/u8QOeiGe6V0',
-  'https://www.youtube.com/embed/Ra5PFMWB988',
+  'tya7H3aeiVk',
+  'KBx_4lxmi2Y', 
+  'rKWCDRzRcMc',
+  'J---aiyznGQ',
+  'u8QOeiGe6V0',
+  'Ra5PFMWB988',
 ];
 
 interface LeftSidebarProps {
@@ -28,6 +28,9 @@ export default function LeftSidebar({ onToggleCollapse }: LeftSidebarProps) {
     }, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, []);
+
+  // Create playlist string for continuous play
+  const playlistString = BRAINROT_VIDEOS.join(',');
 
   return (
     <Card className="h-full rounded-none border-l-0 border-t-0 border-b-0">
@@ -47,20 +50,20 @@ export default function LeftSidebar({ onToggleCollapse }: LeftSidebarProps) {
         </div>
         <div className="flex items-center gap-2">
           <Badge variant="secondary" className="text-xs">
-            {currentVideoIndex + 1}/{BRAINROT_VIDEOS.length}
+            {BRAINROT_VIDEOS.length} videos
           </Badge>
-          <span className="text-xs text-muted-foreground">Peak performance</span>
+          <span className="text-xs text-muted-foreground">Auto-loop</span>
         </div>
       </CardHeader>
       
       <CardContent className="p-2 flex-1 flex flex-col">
         <div className="flex-1 min-h-0">
           <iframe
-            src={`${BRAINROT_VIDEOS[currentVideoIndex]}?autoplay=1&mute=1&loop=1&controls=0&modestbranding=1&rel=0`}
+            src={`https://www.youtube.com/embed/${BRAINROT_VIDEOS[currentVideoIndex]}?autoplay=1&mute=1&loop=1&controls=0&modestbranding=1&rel=0&playlist=${playlistString}`}
             className="w-full h-full rounded-lg"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
             allowFullScreen
-            title={`Brainrot Video ${currentVideoIndex + 1}`}
+            title="Brainrot Videos"
           />
         </div>
       </CardContent>
