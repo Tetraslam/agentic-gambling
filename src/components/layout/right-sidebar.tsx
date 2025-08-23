@@ -1,6 +1,5 @@
 'use client';
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import TradingAgent from '../agents/trading-agent';
 import PokerAgent from '../agents/poker-agent';
@@ -37,18 +36,18 @@ export default function RightSidebar({ activeTab }: RightSidebarProps) {
   const config = AGENT_CONFIG[activeTab as keyof typeof AGENT_CONFIG] || AGENT_CONFIG.trading;
 
   return (
-    <Card className="h-full rounded-none border-r-0 border-t-0 border-b-0">
-      <CardHeader className="pb-2">
+    <div className="h-full flex flex-col border-l">
+      <div className="flex-shrink-0 p-4 pb-2 border-b bg-card">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-base">{config.title}</CardTitle>
+          <h3 className="text-base font-semibold">{config.title}</h3>
           <Badge variant="outline" className="text-xs">
             {config.badge}
           </Badge>
         </div>
         <p className="text-xs text-muted-foreground">{config.description}</p>
-      </CardHeader>
+      </div>
       
-      <CardContent className="p-0 flex-1">
+      <div className="flex-1 min-h-0">
         {activeTab === 'trading' && <TradingAgent />}
         {activeTab === 'poker' && <PokerAgent />}
         {activeTab === 'polymarket' && <PolymarketAgent />}
@@ -84,7 +83,7 @@ export default function RightSidebar({ activeTab }: RightSidebarProps) {
             </div>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { TrendingUp, Send } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 interface Message {
   id: string;
@@ -19,6 +19,8 @@ export default function TradingAgent() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -75,6 +77,17 @@ export default function TradingAgent() {
                 setMessages(prev => prev.map(m => 
                   m.id === aiMessage.id ? { ...m, content: fullContent } : m
                 ));
+                // autoscroll as content streams
+                scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+              }
+              if (data.tool) {
+                // optional: render tool outputs inline
+                setMessages(prev => prev.map(m => 
+                  m.id === aiMessage.id 
+                    ? { ...m, toolInvocations: [...(m.toolInvocations || []), { toolName: data.tool, result: data.result }] }
+                    : m
+                ));
+                scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
               }
             } catch (e) {
               // Ignore parse errors for streaming data
@@ -93,6 +106,8 @@ export default function TradingAgent() {
       setMessages(prev => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
+      // Auto-focus input after response
+      setTimeout(() => inputRef.current?.focus(), 100);
     }
   };
   
@@ -105,41 +120,43 @@ export default function TradingAgent() {
   const willTriggerTrade = messagesUntilTrade === 1;
 
   return (
-    <div className="flex flex-col h-full p-2">
+    <div className="flex flex-col h-full">
       {/* Header */}
-      <Card className="mb-2">
-        <CardContent className="p-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className={`w-2 h-2 rounded-full ${isLoading ? 'bg-yellow-500 animate-pulse' : 'bg-green-500'}`} />
-              <span className="text-xs font-medium">
-                {isLoading ? 'Trading...' : 'Ready'}
-              </span>
-            </div>
-            
-            <div className="flex gap-1">
-              <Badge variant="outline" className="text-xs">
-                {messages.length} msgs
-              </Badge>
-              {willTriggerTrade && (
-                <Badge variant="destructive" className="text-xs animate-pulse">
-                  <TrendingUp className="w-2 h-2 mr-1" />
-                  Trade Ready!
+      <div className="flex-shrink-0 p-2 pb-0">
+        <Card className="mb-2">
+          <CardContent className="p-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className={`w-2 h-2 rounded-full ${isLoading ? 'bg-yellow-500 animate-pulse' : 'bg-green-500'}`} />
+                <span className="text-xs font-medium">
+                  {isLoading ? 'Trading...' : 'Ready'}
+                </span>
+              </div>
+              
+              <div className="flex gap-1">
+                <Badge variant="outline" className="text-xs">
+                  {messages.length} msgs
                 </Badge>
-              )}
+                {willTriggerTrade && (
+                  <Badge variant="destructive" className="text-xs animate-pulse">
+                    <TrendingUp className="w-2 h-2 mr-1" />
+                    Trade Ready!
+                  </Badge>
+                )}
+              </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
 
-      {/* Messages */}
-      <ScrollArea className="flex-1 mb-2">
-        <div className="space-y-2">
+      {/* Messages - SCROLLABLE ONLY */}
+      <div className="flex-1 overflow-y-auto px-3 pb-2" ref={scrollRef}>
+        <div className="space-y-3">
           {messages.length === 0 ? (
-            <div className="text-center py-6">
-              <p className="text-muted-foreground text-xs">👋 I'm your trading agent!</p>
+            <div className="text-center py-8">
+              <p className="text-muted-foreground text-sm">Ready to trade!</p>
               <p className="text-xs text-muted-foreground mt-1">
-                I'll execute real trades every 5 messages
+                Ask me about markets or just say hi
               </p>
             </div>
           ) : (
@@ -148,65 +165,66 @@ export default function TradingAgent() {
                 key={message.id}
                 className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
-                <Card className={`max-w-[85%] ${
+                <div className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${
                   message.role === 'user' 
                     ? 'bg-primary text-primary-foreground' 
-                    : 'bg-muted'
+                    : 'bg-muted/60 border'
                 }`}>
-                  <CardContent className="p-2">
-                    <p className="text-xs leading-relaxed">{message.content}</p>
+                  <div className="leading-relaxed whitespace-pre-wrap">
+                    {message.content}
+                    
+                    {/* Inline tool calls */}
                     {message.toolInvocations && message.toolInvocations.length > 0 && (
-                      <div className="mt-2 pt-2 border-t border-border/50">
+                      <div className="mt-2 space-y-1">
                         {message.toolInvocations.map((tool: any, idx: number) => (
-                          <div key={idx} className="text-xs opacity-75 mb-1">
-                            <span className="font-medium">🔧 {tool.toolName}:</span>
+                          <div key={idx} className="text-xs opacity-80 border-l-2 border-primary/30 pl-2 ml-1">
+                            <div className="font-medium text-primary/90">⚡ {tool.toolName}</div>
                             {tool.result && (
-                              <div className="mt-1 p-1 bg-background/20 rounded text-xs">
-                                {typeof tool.result === 'object' ? JSON.stringify(tool.result, null, 2) : tool.result}
+                              <div className="mt-1 p-2 bg-background/60 rounded text-xs font-mono">
+                                {typeof tool.result === 'object' 
+                                  ? JSON.stringify(tool.result, null, 2)
+                                    .split('\n')
+                                    .slice(0, 3)
+                                    .join('\n') + (JSON.stringify(tool.result).length > 100 ? '\n...' : '')
+                                  : tool.result}
                               </div>
                             )}
                           </div>
                         ))}
                       </div>
                     )}
-                  </CardContent>
-                </Card>
+                  </div>
+                </div>
               </div>
             ))
           )}
           {isLoading && (
             <div className="flex justify-start">
-              <Card className="bg-muted">
-                <CardContent className="p-2">
-                  <p className="text-xs text-muted-foreground">Agent analyzing markets...</p>
-                </CardContent>
-              </Card>
+              <div className="bg-muted/60 border rounded-lg px-3 py-2">
+                <p className="text-sm text-muted-foreground animate-pulse">Analyzing markets...</p>
+              </div>
             </div>
           )}
         </div>
-      </ScrollArea>
+      </div>
 
-      {/* Input */}
-      <div className="space-y-2">
+      {/* Input - COMPLETELY SEPARATE FIXED BOTTOM */}
+      <div className="flex-shrink-0 border-t bg-background p-2">
+        <div className="space-y-2">
         <form onSubmit={handleSubmit} className="flex gap-2">
           <Input
+            ref={inputRef}
             value={input}
             onChange={handleInputChange}
             placeholder="Ask about markets..."
             disabled={isLoading}
-            className="flex-1 text-xs h-8"
+            className="flex-1 text-sm h-9"
           />
-          <Button type="submit" disabled={!input.trim() || isLoading} size="sm" className="h-8 px-3">
+          <Button type="submit" disabled={!input.trim() || isLoading} size="sm" className="h-9 px-3">
             <Send className="w-3 h-3" />
           </Button>
         </form>
-        
-        {/* Trade Warning */}
-        {willTriggerTrade && (
-          <div className="p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800">
-            ⚠️ Next message triggers a trade!
-          </div>
-        )}
+        </div>
       </div>
     </div>
   );
