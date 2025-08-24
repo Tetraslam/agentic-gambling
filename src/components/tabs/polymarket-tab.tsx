@@ -10,6 +10,8 @@ import { useState, useEffect } from 'react';
 import { getMarkets, SimplifiedMarket, searchMarkets, PolymarketAPI } from '@/lib/apis/polymarket';
 import { Input } from '@/components/ui/input';
 import { Search } from 'lucide-react';
+import PlaceBetModal from '@/components/polymarket/place-bet-modal';
+import MarketDetailModal from '@/components/polymarket/market-detail-modal';
 
 export default function PolymarketTab() {
   // Get reactive data from Convex
@@ -40,6 +42,12 @@ export default function PolymarketTab() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searching, setSearching] = useState(false);
   const [portfolioCollapsed, setPortfolioCollapsed] = useState(false);
+  
+  // Modal states
+  const [placeBetModalOpen, setPlaceBetModalOpen] = useState(false);
+  const [marketDetailModalOpen, setMarketDetailModalOpen] = useState(false);
+  const [selectedMarket, setSelectedMarket] = useState<SimplifiedMarket | null>(null);
+  const [selectedPosition, setSelectedPosition] = useState<'yes' | 'no'>('yes');
 
   const toggleUnhingedMode = () => {
     updateSettings({ polymarketUnhingedMode: !unhingedMode });
@@ -47,6 +55,28 @@ export default function PolymarketTab() {
 
   const toggleDemoMode = () => {
     updateSettings({ polymarketDemoMode: !demoMode });
+  };
+
+  // Modal handlers
+  const handleOpenMarketDetail = (market: SimplifiedMarket) => {
+    setSelectedMarket(market);
+    setMarketDetailModalOpen(true);
+  };
+
+  const handleOpenBetModal = (market: SimplifiedMarket, position: 'yes' | 'no') => {
+    setSelectedMarket(market);
+    setSelectedPosition(position);
+    setPlaceBetModalOpen(true);
+  };
+
+  const handleCloseBetModal = () => {
+    setPlaceBetModalOpen(false);
+    setSelectedMarket(null);
+  };
+
+  const handleCloseMarketDetail = () => {
+    setMarketDetailModalOpen(false);
+    setSelectedMarket(null);
   };
 
   // Fetch real Polymarket data
@@ -132,7 +162,7 @@ export default function PolymarketTab() {
   }, [searchQuery]);
 
   // Enhanced trading function with proper demo/real distinction
-  const handleTrade = async (market: SimplifiedMarket, position: 'yes' | 'no', amount: number = 100) => {
+  const handleTrade = async (market: SimplifiedMarket, position: 'yes' | 'no', amount: number) => {
     try {
       const odds = position === 'yes' ? market.yesPrice : market.noPrice;
       const potentialWin = amount / odds;
@@ -490,68 +520,78 @@ export default function PolymarketTab() {
           ))
         ) : (
           markets.map((market) => (
-            <Card key={market.id} className="h-fit hover:shadow-md transition-shadow">
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
-                  <CardTitle className="text-sm leading-tight">
-                    {market.question}
-                  </CardTitle>
-                  <div className="flex flex-col gap-1">
-                    <Badge variant="outline" className="ml-2">
-                      {market.category}
-                    </Badge>
-                    {market.featured && (
-                      <Badge variant="secondary" className="ml-2 text-xs">
-                        ⭐ Featured
+            <Card key={market.id} className="h-fit hover:shadow-md transition-shadow cursor-pointer">
+              <div onClick={() => handleOpenMarketDetail(market)}>
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between">
+                    <CardTitle className="text-sm leading-tight">
+                      {market.question}
+                    </CardTitle>
+                    <div className="flex flex-col gap-1">
+                      <Badge variant="outline" className="ml-2">
+                        {market.category}
                       </Badge>
-                    )}
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {/* Yes/No Prices */}
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button 
-                      variant="outline" 
-                      className="h-16 flex flex-col gap-1 hover:bg-green-50 hover:border-green-300"
-                      onClick={() => handleTrade(market, 'yes', 100)}
-                    >
-                      <div className="flex items-center gap-1">
-                        <TrendingUp className="w-4 h-4 text-green-600" />
-                        <span className="font-semibold">YES</span>
-                      </div>
-                      <span className="text-xl font-bold text-green-600">
-                        {(market.yesPrice * 100).toFixed(0)}¢
-                      </span>
-                    </Button>
-                    
-                    <Button 
-                      variant="outline" 
-                      className="h-16 flex flex-col gap-1 hover:bg-red-50 hover:border-red-300"
-                      onClick={() => handleTrade(market, 'no', 100)}
-                    >
-                      <div className="flex items-center gap-1">
-                        <TrendingDown className="w-4 h-4 text-red-600" />
-                        <span className="font-semibold">NO</span>
-                      </div>
-                      <span className="text-xl font-bold text-red-600">
-                        {(market.noPrice * 100).toFixed(0)}¢
-                      </span>
-                    </Button>
-                  </div>
-
-                  {/* Volume and End Date */}
-                  <div className="text-center space-y-1">
-                    <div className="text-sm text-muted-foreground">
-                      Volume: {market.volume}
+                      {market.featured && (
+                        <Badge variant="secondary" className="ml-2 text-xs">
+                          ⭐ Featured
+                        </Badge>
+                      )}
                     </div>
-                    {market.endDate && (
-                      <div className="text-xs text-muted-foreground">
-                        Ends: {new Date(market.endDate).toLocaleDateString()}
-                      </div>
-                    )}
                   </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {/* Volume and End Date */}
+                    <div className="text-center space-y-1">
+                      <div className="text-sm text-muted-foreground">
+                        Volume: {market.volume}
+                      </div>
+                      {market.endDate && (
+                        <div className="text-xs text-muted-foreground">
+                          Ends: {new Date(market.endDate).toLocaleDateString()}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </div>
+              
+              {/* Yes/No Prices - Outside the clickable area */}
+              <CardContent className="pt-0">
+                <div className="grid grid-cols-2 gap-2">
+                  <Button 
+                    variant="outline" 
+                    className="h-16 flex flex-col gap-1 hover:bg-green-50 hover:border-green-300"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenBetModal(market, 'yes');
+                    }}
+                  >
+                    <div className="flex items-center gap-1">
+                      <TrendingUp className="w-4 h-4 text-green-600" />
+                      <span className="font-semibold">YES</span>
+                    </div>
+                    <span className="text-xl font-bold text-green-600">
+                      {(market.yesPrice * 100).toFixed(0)}¢
+                    </span>
+                  </Button>
+                  
+                  <Button 
+                    variant="outline" 
+                    className="h-16 flex flex-col gap-1 hover:bg-red-50 hover:border-red-300"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenBetModal(market, 'no');
+                    }}
+                  >
+                    <div className="flex items-center gap-1">
+                      <TrendingDown className="w-4 h-4 text-red-600" />
+                      <span className="font-semibold">NO</span>
+                    </div>
+                    <span className="text-xl font-bold text-red-600">
+                      {(market.noPrice * 100).toFixed(0)}¢
+                    </span>
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -560,7 +600,25 @@ export default function PolymarketTab() {
         </div>
       </div>
 
+      {/* Modals */}
+      <PlaceBetModal
+        isOpen={placeBetModalOpen}
+        onClose={handleCloseBetModal}
+        market={selectedMarket}
+        position={selectedPosition}
+        balance={balance}
+        demoMode={demoMode}
+        onPlaceBet={handleTrade}
+      />
 
+      <MarketDetailModal
+        isOpen={marketDetailModalOpen}
+        onClose={handleCloseMarketDetail}
+        market={selectedMarket}
+        balance={balance}
+        demoMode={demoMode}
+        onPlaceBet={handleTrade}
+      />
     </div>
   );
 }

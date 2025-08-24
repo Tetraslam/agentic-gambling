@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { useState, useEffect, useRef } from 'react';
-import { Send, Zap, TrendingUp, TrendingDown, Flame } from 'lucide-react';
+import { Send, Zap, TrendingUp, TrendingDown, Flame, Trash2 } from 'lucide-react';
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { getRandomMarkets, SimplifiedMarket } from '@/lib/apis/polymarket';
@@ -108,6 +108,15 @@ export default function PolymarketAgent() {
 
     return () => clearTimeout(timeout);
   }, [messages, unhingedMode, availableMarkets]);
+
+  const handleClearChats = async () => {
+    try {
+      await clearAllMessages();
+      setLocalMessages([]); // Also clear local optimistic messages
+    } catch (error) {
+      console.error('Error clearing messages:', error);
+    }
+  };
 
   const executeRandomTrade = async () => {
     // Use real markets if available, otherwise fallback to demo data
@@ -288,13 +297,15 @@ export default function PolymarketAgent() {
                       ? 'bg-red-500 animate-pulse'
                       : 'bg-green-500'
                 }`} />
-                <span className="text-xs font-medium">
-                  {isThinking ? 'Thinking...' : unhingedMode ? 'UNHINGED MODE' : 'Rational mode'}
-                </span>
+                {(isThinking || unhingedMode) && (
+                  <span className="text-xs font-medium">
+                    {isThinking ? 'Thinking...' : 'UNHINGED MODE'}
+                  </span>
+                )}
                 {unhingedMode && <Flame className="w-3 h-3 text-red-500" />}
               </div>
               
-              <div className="flex gap-1">
+              <div className="flex gap-1 items-center">
                 <Badge variant="outline" className="text-xs">
                   ${balance.toLocaleString()}
                 </Badge>
@@ -304,6 +315,17 @@ export default function PolymarketAgent() {
                 <Badge variant="outline" className="text-xs">
                   {messages.length} msgs
                 </Badge>
+                {messages.length > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleClearChats}
+                    className="h-5 w-5 p-0 text-muted-foreground hover:text-destructive"
+                    title="Clear chat history"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </Button>
+                )}
               </div>
             </div>
           </CardContent>
@@ -352,7 +374,7 @@ export default function PolymarketAgent() {
           ) : (
             messages.map((message) => (
               <div
-                key={message._id}
+                key={message.id}
                 className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 <div className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${
@@ -407,6 +429,18 @@ export default function PolymarketAgent() {
               disabled={isThinking}
               className="flex-1 text-sm h-9"
             />
+            {messages.length > 0 && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleClearChats}
+                className="h-9 px-2 text-muted-foreground hover:text-destructive"
+                title="Clear all messages"
+              >
+                <Trash2 className="w-3 h-3" />
+              </Button>
+            )}
             <Button type="submit" disabled={!input.trim() || isThinking} size="sm" className="h-9 px-3">
               <Send className="w-3 h-3" />
             </Button>
