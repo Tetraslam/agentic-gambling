@@ -80,7 +80,7 @@ export default function MainLayout() {
         {/* Main Content */}
         <ResizablePanel defaultSize={leftSidebarCollapsed ? 80 : 60}>
           <div className="flex flex-col h-full">
-            <Tabs value={activeTab} onValueChange={(tab) => updateSettings({ activeTab: tab as "trading" | "poker" | "polymarket" | "credits" })}>
+            <Tabs value={activeTab} onValueChange={(tab) => updateSettings({ activeTab: tab as "trading" | "poker" | "polymarket" | "credits" })} className="h-full flex flex-col min-h-0">
               <TabsList className="m-2">
                 <TabsTrigger value="trading">📈 Trading</TabsTrigger>
                 <TabsTrigger value="poker">🃏 Poker</TabsTrigger>
@@ -88,14 +88,14 @@ export default function MainLayout() {
                 <TabsTrigger value="credits">💰 Credits</TabsTrigger>
               </TabsList>
 
-              <div className="flex-1">
+              <div className="flex-1 min-h-0 overflow-hidden">
                 <TabsContent value="trading" className="h-full p-2">
                   <TradingTab />
                 </TabsContent>
                 <TabsContent value="poker" className="h-full p-2">
                   <PokerTab />
                 </TabsContent>
-                <TabsContent value="polymarket" className="h-full p-2">
+                <TabsContent value="polymarket" className="h-full p-2 overflow-y-auto">
                   <PolymarketTab />
                 </TabsContent>
                 <TabsContent value="credits" className="h-full p-2">

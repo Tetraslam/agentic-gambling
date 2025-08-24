@@ -4,15 +4,25 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Send, Camera, Eye } from 'lucide-react';
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
+import { captureIframeById } from "@/lib/utils/screenshot";
+
+interface Message {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  toolInvocations?: any[];
+}
 
 export default function PokerAgent() {
   const [input, setInput] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [localMessages, setLocalMessages] = useState<Message[]>([]);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // Get reactive data from Convex
   const messages = useQuery(api.poker.getMessages) || [];
@@ -21,56 +31,103 @@ export default function PokerAgent() {
   const addMessage = useMutation(api.poker.addMessage);
   const updateGameState = useMutation(api.poker.updateGameState);
 
+  // Merge Convex messages (DB) with streaming local message(s)
+  const combinedMessages: Message[] = [
+    ...messages.map((m: any) => ({
+      id: m._id,
+      role: m.role,
+      content: m.content,
+      toolInvocations: []
+    })).reverse(),
+    ...localMessages
+  ];
+
   const handleSend = async () => {
     if (!input.trim()) return;
 
     const userMessage = input.trim();
     setInput('');
-    
-    // Simulate taking a screenshot when user sends a message
-    const fakeScreenshot = `data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300"><rect width="100%" height="100%" fill="%23065f46"/><circle cx="200" cy="150" r="50" fill="%23ffffff" opacity="0.1"/><text x="50%" y="50%" text-anchor="middle" dy=".3em" font-family="Arial" fill="%23ffffff" font-size="14">Screenshot ${screenshots.length + 1}</text><text x="50%" y="70%" text-anchor="middle" dy=".3em" font-family="Arial" fill="%23a7f3d0" font-size="12">${new Date().toLocaleTimeString()}</text></svg>`;
-    
-    // Add user message
-    await addMessage({
-      role: 'user',
-      content: userMessage,
-      screenshot: fakeScreenshot,
-    });
-
     setIsAnalyzing(true);
 
-    // Simulate agent analyzing the screenshot
-    setTimeout(async () => {
-      const responses = [
-        "I can see you're holding pocket aces! This is a strong hand, I'd recommend raising.",
-        "Your position looks good. The flop seems favorable - consider a continuation bet.",
-        "I notice the opponent is showing weakness. This might be a good spot to bluff.",
-        "The board is quite coordinated. Be careful of potential draws.",
-        "Your stack size suggests we should play more conservatively here.",
-        "I see a potential flush draw on the board. Adjust your bet sizing accordingly.",
-        "The opponent's betting pattern suggests they have a made hand. Consider folding.",
-        "This is a good spot for a check-call. Let them build the pot for us.",
+    try {
+      // Capture a real screenshot of the poker iframe for every message
+      let screenshotDataUrl: string | null = null;
+      try {
+        screenshotDataUrl = await captureIframeById('poker_game', { preferCurrentTab: true, includeCursor: false });
+      } catch (e) {
+        console.warn('Screenshot capture failed; continuing without image', e);
+      }
+
+      // Persist user message (with screenshot if available) to Convex
+      await addMessage({ role: 'user', content: userMessage, screenshot: screenshotDataUrl || undefined });
+
+      // Compose all messages for the API
+      const allMessages = [
+        ...combinedMessages.map(m => ({ role: m.role, content: m.content })),
+        screenshotDataUrl
+          ? { role: 'user' as const, content: [
+              { type: 'text', text: userMessage },
+              { type: 'image', image: screenshotDataUrl }
+            ] }
+          : { role: 'user' as const, content: userMessage }
       ];
 
-      const pokerAdvice = responses[Math.floor(Math.random() * responses.length)];
-      
-      // Update game state randomly
-      const actions = ['fold', 'call', 'raise', 'check', 'bet'];
-      const randomAction = actions[Math.floor(Math.random() * actions.length)];
-      
-      await updateGameState({
-        isPlaying: true,
-        lastAction: randomAction,
-        chipCount: Math.floor(Math.random() * 5000) + 1000,
+      const response = await fetch('/api/chat/poker', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: allMessages })
       });
 
-      await addMessage({
-        role: 'assistant',
-        content: `📸 Screenshot analyzed! ${pokerAdvice}`,
-      });
+      if (!response.ok) throw new Error('Poker API call failed');
 
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('No reader available');
+
+      const aiMessageId = (Date.now() + 1).toString();
+      const aiMessage: Message = { id: aiMessageId, role: 'assistant', content: '', toolInvocations: [] };
+      setLocalMessages([aiMessage]);
+
+      let fullContent = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = new TextDecoder().decode(value);
+        const lines = chunk.split('\n').filter(line => line.trim());
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const data = JSON.parse(line.slice(6));
+            if (data.content) {
+              fullContent += data.content;
+              setLocalMessages(prev => prev.map(m => m.id === aiMessageId ? { ...m, content: fullContent } : m));
+              scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+            }
+            if (data.tool) {
+              // Inline render tool results
+              setLocalMessages(prev => prev.map(m => m.id === aiMessageId ? { ...m, toolInvocations: [...(m.toolInvocations || []), { toolName: data.tool, result: data.result }] } : m));
+              scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+            }
+          } catch {
+            // ignore JSON parse issues for partial chunks
+          }
+        }
+      }
+
+      if (fullContent.trim()) {
+        await addMessage({ role: 'assistant', content: fullContent.trim() });
+        setLocalMessages([]);
+      }
+    } catch (err) {
+      console.error('Poker agent error:', err);
+      try {
+        await addMessage({ role: 'assistant', content: `Error: ${String(err)}` });
+      } catch {}
+      setLocalMessages([]);
+    } finally {
       setIsAnalyzing(false);
-    }, 1500 + Math.random() * 2000);
+      setTimeout(() => inputRef.current?.focus(), 100);
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -79,6 +136,8 @@ export default function PokerAgent() {
       handleSend();
     }
   };
+
+  const renderedMessages = combinedMessages;
 
   return (
     <div className="h-full flex flex-col p-4">
@@ -128,19 +187,19 @@ export default function PokerAgent() {
         </Card>
       )}
 
-      {/* Messages */}
-      <ScrollArea className="flex-1 mb-4">
+      {/* Messages - streaming with auto-scroll */}
+      <div className="flex-1 mb-4 overflow-y-auto px-1" ref={scrollRef}>
         <div className="space-y-4">
-          {messages.length === 0 && (
+          {renderedMessages.length === 0 && (
             <div className="text-center text-muted-foreground py-8">
               <p>🎯 I'm your poker agent!</p>
               <p className="text-sm mt-1">Send me a message and I'll analyze your game via screenshot.</p>
             </div>
           )}
           
-          {messages.map((message) => (
+          {renderedMessages.map((message: Message) => (
             <div
-              key={message._id}
+              key={message.id}
               className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
             >
               <div
@@ -150,21 +209,31 @@ export default function PokerAgent() {
                     : 'bg-muted'
                 }`}
               >
-                <p className="text-sm">{message.content}</p>
-                {message.screenshot && message.role === 'user' && (
-                  <div className="mt-2">
-                    <img
-                      src={message.screenshot}
-                      alt="Screenshot"
-                      className="w-full max-w-32 h-24 object-cover rounded border"
-                    />
+                <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p>
+                {Array.isArray(message.toolInvocations) && message.toolInvocations.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    {message.toolInvocations.map((tool: any, index: number) => (
+                      <div key={index} className="text-xs opacity-80 border-l-2 border-primary/30 pl-2 ml-1">
+                        <div className="font-medium text-primary/90">⚡ {tool.toolName}</div>
+                        {tool.result && (
+                          <div className="mt-1 p-2 bg-background/60 rounded text-xs font-mono">
+                            {typeof tool.result === 'object'
+                              ? JSON.stringify(tool.result, null, 2)
+                                  .split('\n')
+                                  .slice(0, 3)
+                                  .join('\n') + (JSON.stringify(tool.result).length > 100 ? '\n...' : '')
+                              : String(tool.result)}
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
             </div>
           ))}
         </div>
-      </ScrollArea>
+      </div>
 
       {/* Input */}
       <div className="flex gap-2">
@@ -175,6 +244,7 @@ export default function PokerAgent() {
           placeholder="Ask for advice, describe your hand, or just chat..."
           disabled={isAnalyzing}
           className="flex-1"
+          ref={inputRef}
         />
         <Button onClick={handleSend} disabled={!input.trim() || isAnalyzing}>
           <Send className="w-4 h-4" />

@@ -16,11 +16,10 @@ let ssePush: ((obj: unknown) => void) | null = null;
 export async function POST(req: NextRequest) {
   const { messages } = await req.json();
 
-  // Use GPT-5 multimodal for poker analysis
+  // Use GPT-5 multimodal for poker analysis when available; fallback to gpt-4o
   const result = await streamText({
-    model: openai('gpt-4o'), // Will switch to gpt-5 when available
+    model: openai(process.env.NEXT_PUBLIC_POKER_MODEL || 'gpt-4o'),
     messages,
-    maxSteps: 8,
     system: `You are an expert poker AI agent with advanced computer vision capabilities. You can:
 
 1. Analyze poker game screenshots to identify cards, board state, pot size, player actions
@@ -78,7 +77,7 @@ When analyzing screenshots, describe what you see in detail before giving advice
           amount: z.optional(z.number()).describe('Bet amount if raising/betting'),
         }),
         execute: async ({ element, amount }) => {
-          ssePush?.({ content: `🎯 Clicking ${element}${amount ? ` for ${amount}` : ''}...` });
+          ssePush?.({ content: `🖱️ Click assist: ${element}${amount ? ` for ${amount}` : ''}` });
           
           // Simulate clicking - in production this would use browser-use
           const action = {
@@ -100,7 +99,7 @@ When analyzing screenshots, describe what you see in detail before giving advice
           }
 
           const result = {
-            action: `Clicked ${element}`,
+            action: `Click assist: ${element}`,
             amount: amount || null,
             success: true,
             message: `Successfully performed ${element} action`

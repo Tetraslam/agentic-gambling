@@ -218,7 +218,7 @@ export default function PolymarketTab() {
     }
   };
   return (
-    <div className="h-full flex flex-col gap-4 overflow-hidden">
+    <div className="h-full min-h-0 flex flex-col gap-4 overflow-y-auto">
       {/* Header with Balance & Unhinged Mode */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -370,7 +370,7 @@ export default function PolymarketTab() {
       </div>
 
       {/* Markets Grid */}
-      <div className="flex-1 overflow-auto">
+      <div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 p-1">
         {loading && markets.length === 0 ? (
           // Loading skeleton
