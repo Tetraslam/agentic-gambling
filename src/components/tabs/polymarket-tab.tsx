@@ -3,17 +3,19 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { TrendingUp, TrendingDown, Zap, RefreshCw, Shield, DollarSign } from 'lucide-react';
+import { TrendingUp, TrendingDown, Zap, RefreshCw, Shield, DollarSign, ChevronDown, ChevronUp } from 'lucide-react';
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { useState, useEffect } from 'react';
 import { getMarkets, SimplifiedMarket, searchMarkets, PolymarketAPI } from '@/lib/apis/polymarket';
 import { Input } from '@/components/ui/input';
 import { Search } from 'lucide-react';
+import PlaceBetModal from '@/components/polymarket/place-bet-modal';
+import MarketDetailModal from '@/components/polymarket/market-detail-modal';
 
 export default function PolymarketTab() {
   // Get reactive data from Convex
-  const activeBets = useQuery(api.polymarket.getActiveBets) || [];
+  const allActiveBets = useQuery(api.polymarket.getActiveBets) || [];
   const tradeCount = useQuery(api.polymarket.getTradeCount) || 0;
   const betSummary = useQuery(api.polymarket.getBetSummary);
   const settings = useQuery(api.userSettings.getSettings);
@@ -25,6 +27,13 @@ export default function PolymarketTab() {
   const unhingedMode = settings?.polymarketUnhingedMode ?? true;
   const demoMode = settings?.polymarketDemoMode ?? true;
 
+  // Filter active bets based on current demo mode
+  const activeBets = allActiveBets.filter(bet => {
+    // Match Convex logic: if isDemo is undefined, treat as real bet (not demo)
+    const betIsDemo = bet.isDemo === true;
+    return betIsDemo === demoMode;
+  });
+
   // State for real Polymarket data
   const [markets, setMarkets] = useState<SimplifiedMarket[]>([]);
   const [loading, setLoading] = useState(true);
@@ -32,6 +41,13 @@ export default function PolymarketTab() {
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searching, setSearching] = useState(false);
+  const [portfolioCollapsed, setPortfolioCollapsed] = useState(false);
+  
+  // Modal states
+  const [placeBetModalOpen, setPlaceBetModalOpen] = useState(false);
+  const [marketDetailModalOpen, setMarketDetailModalOpen] = useState(false);
+  const [selectedMarket, setSelectedMarket] = useState<SimplifiedMarket | null>(null);
+  const [selectedPosition, setSelectedPosition] = useState<'yes' | 'no'>('yes');
 
   const toggleUnhingedMode = () => {
     updateSettings({ polymarketUnhingedMode: !unhingedMode });
@@ -39,6 +55,28 @@ export default function PolymarketTab() {
 
   const toggleDemoMode = () => {
     updateSettings({ polymarketDemoMode: !demoMode });
+  };
+
+  // Modal handlers
+  const handleOpenMarketDetail = (market: SimplifiedMarket) => {
+    setSelectedMarket(market);
+    setMarketDetailModalOpen(true);
+  };
+
+  const handleOpenBetModal = (market: SimplifiedMarket, position: 'yes' | 'no') => {
+    setSelectedMarket(market);
+    setSelectedPosition(position);
+    setPlaceBetModalOpen(true);
+  };
+
+  const handleCloseBetModal = () => {
+    setPlaceBetModalOpen(false);
+    setSelectedMarket(null);
+  };
+
+  const handleCloseMarketDetail = () => {
+    setMarketDetailModalOpen(false);
+    setSelectedMarket(null);
   };
 
   // Fetch real Polymarket data
@@ -124,7 +162,7 @@ export default function PolymarketTab() {
   }, [searchQuery]);
 
   // Enhanced trading function with proper demo/real distinction
-  const handleTrade = async (market: SimplifiedMarket, position: 'yes' | 'no', amount: number = 100) => {
+  const handleTrade = async (market: SimplifiedMarket, position: 'yes' | 'no', amount: number) => {
     try {
       const odds = position === 'yes' ? market.yesPrice : market.noPrice;
       const potentialWin = amount / odds;
@@ -248,22 +286,7 @@ export default function PolymarketTab() {
             </div>
           </Card>
 
-          {betSummary && (
-            <Card className="px-4 py-2">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium">Profits:</span>
-                <Badge 
-                  variant={betSummary.totalProfits >= 0 ? "default" : "destructive"}
-                  className="text-sm"
-                >
-                  ${betSummary.totalProfits.toFixed(2)}
-                </Badge>
-                <span className="text-xs text-muted-foreground">
-                  (Your share: ${(betSummary.userShare || 0).toFixed(2)})
-                </span>
-              </div>
-            </Card>
-          )}
+
         </div>
 
         <div className="flex items-center gap-2">
@@ -313,47 +336,152 @@ export default function PolymarketTab() {
         </div>
       )}
 
-      {/* Active Bets Section */}
-      {activeBets.length > 0 && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg flex items-center gap-2">
-              🎯 Active Bets ({activeBets.length})
+      {/* Portfolio & Active Bets */}
+      <Card>
+        <CardHeader className={`${portfolioCollapsed ? 'py-2 px-3' : 'pb-2'}`}>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              📊 Portfolio & Bets
               {demoMode && (
                 <Badge variant="secondary" className="text-xs">
                   Demo Mode
                 </Badge>
               )}
             </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {activeBets.slice(0, 6).map((bet, index) => (
-                <div key={bet._id} className="flex items-center justify-between p-3 border rounded-lg">
-                  <div className="flex-1">
-                    <div className="font-medium text-sm truncate" title={bet.market}>
-                      {bet.market.slice(0, 40)}...
-                    </div>
-                    <div className="text-xs text-muted-foreground mt-1">
-                      ${bet.amount} on {bet.position.toUpperCase()} ({(bet.odds! * 100).toFixed(0)}¢)
-                    </div>
-                  </div>
-                  {demoMode && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => simulateBetResolution({ betId: bet._id })}
-                      className="text-xs"
-                    >
-                      Resolve
-                    </Button>
-                  )}
-                </div>
-              ))}
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="text-xs">
+                {activeBets.length} active {demoMode ? 'demo' : 'live'}
+              </Badge>
+              <Badge variant="outline" className="text-xs">
+                {allActiveBets.filter(bet => bet.isDemo !== true).length} live
+              </Badge>
+              <Badge variant="outline" className="text-xs">
+                {allActiveBets.filter(bet => bet.isDemo === true).length} demo
+              </Badge>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setPortfolioCollapsed(!portfolioCollapsed)}
+                className="h-6 w-6 p-0"
+              >
+                {portfolioCollapsed ? (
+                  <ChevronDown className="h-3 w-3" />
+                ) : (
+                  <ChevronUp className="h-3 w-3" />
+                )}
+              </Button>
             </div>
+          </div>
+        </CardHeader>
+        <div className={`transition-all duration-200 ease-in-out overflow-hidden ${portfolioCollapsed ? 'max-h-0' : 'max-h-[1000px]'}`}>
+          <CardContent className="space-y-3">
+            {/* Quick Stats Row */}
+            <div className="grid grid-cols-4 gap-2">
+              {betSummary && (
+                <>
+                  <div className="text-center p-2 bg-muted/20 rounded">
+                    <div className={`font-bold text-sm ${betSummary.totalProfits >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {betSummary.totalProfits >= 0 ? '+' : ''}${betSummary.totalProfits.toFixed(0)}
+                    </div>
+                    <div className="text-xs text-muted-foreground">P&L</div>
+                  </div>
+                  
+                  <div className="text-center p-2 bg-muted/20 rounded">
+                    <div className="font-bold text-sm text-blue-600">
+                      ${(betSummary.userShare || 0).toFixed(0)}
+                    </div>
+                    <div className="text-xs text-muted-foreground">Your Share</div>
+                  </div>
+                </>
+              )}
+              
+              <div className="text-center p-2 bg-muted/20 rounded">
+                <div className="font-bold text-sm">{activeBets.length}</div>
+                <div className="text-xs text-muted-foreground">Active</div>
+              </div>
+              
+              <div className="text-center p-2 bg-muted/20 rounded">
+                <div className="font-bold text-sm">
+                  {activeBets.length > 0 ? Math.round(activeBets.reduce((sum, bet) => sum + bet.amount, 0) / activeBets.length) : 0}
+                </div>
+                <div className="text-xs text-muted-foreground">Avg Bet</div>
+              </div>
+            </div>
+
+            {/* Active Bets Grid */}
+            {activeBets.length > 0 ? (
+              <div className="max-h-48 overflow-y-auto">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 auto-rows-min">
+                  {activeBets.slice(0, 12).map((bet, index) => {
+                    const betIsDemo = bet.isDemo === true;
+                    return (
+                      <div key={bet._id} className="border rounded-lg p-3 bg-card hover:shadow-sm transition-shadow">
+                        <div className="space-y-2">
+                          {/* Header with Badge */}
+                          <div className="flex items-start justify-between gap-2">
+                            <Badge 
+                              variant={betIsDemo ? "secondary" : "default"} 
+                              className="text-xs flex-shrink-0"
+                            >
+                              {betIsDemo ? "DEMO" : "LIVE"}
+                            </Badge>
+                            <Badge 
+                              variant={bet.position === 'yes' ? "default" : "destructive"}
+                              className="text-xs"
+                            >
+                              {bet.position.toUpperCase()}
+                            </Badge>
+                          </div>
+                          
+                          {/* Market Question */}
+                          <div className="font-medium text-sm leading-tight" title={bet.market}>
+                            {bet.market.slice(0, 50)}{bet.market.length > 50 ? '...' : ''}
+                          </div>
+                          
+                          {/* Bet Details */}
+                          <div className="flex items-center justify-between text-xs text-muted-foreground">
+                            <span className="font-medium text-foreground">${bet.amount}</span>
+                            <span>{(bet.odds! * 100).toFixed(0)}¢</span>
+                          </div>
+                          
+                          {/* Action Button */}
+                          {betIsDemo && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => simulateBetResolution({ betId: bet._id })}
+                              className="w-full text-xs h-7"
+                            >
+                              Resolve
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {activeBets.length > 12 && (
+                  <div className="text-center text-xs text-muted-foreground py-2 mt-3 border-t">
+                    +{activeBets.length - 12} more bets...
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-center py-4 text-muted-foreground">
+                <p className="text-sm">No active {demoMode ? 'demo' : 'live'} bets</p>
+                <p className="text-xs">
+                  {demoMode 
+                    ? "Start demo trading below!" 
+                    : allActiveBets.filter(bet => bet.isDemo === true).length > 0 
+                      ? "Switch to demo mode to see demo bets" 
+                      : "Start trading below!"
+                  }
+                </p>
+              </div>
+            )}
           </CardContent>
-        </Card>
-      )}
+        </div>
+      </Card>
 
       {/* Search Bar */}
       <div className="relative">
@@ -392,68 +520,78 @@ export default function PolymarketTab() {
           ))
         ) : (
           markets.map((market) => (
-            <Card key={market.id} className="h-fit hover:shadow-md transition-shadow">
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
-                  <CardTitle className="text-sm leading-tight">
-                    {market.question}
-                  </CardTitle>
-                  <div className="flex flex-col gap-1">
-                    <Badge variant="outline" className="ml-2">
-                      {market.category}
-                    </Badge>
-                    {market.featured && (
-                      <Badge variant="secondary" className="ml-2 text-xs">
-                        ⭐ Featured
+            <Card key={market.id} className="h-fit hover:shadow-md transition-shadow cursor-pointer">
+              <div onClick={() => handleOpenMarketDetail(market)}>
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between">
+                    <CardTitle className="text-sm leading-tight">
+                      {market.question}
+                    </CardTitle>
+                    <div className="flex flex-col gap-1">
+                      <Badge variant="outline" className="ml-2">
+                        {market.category}
                       </Badge>
-                    )}
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {/* Yes/No Prices */}
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button 
-                      variant="outline" 
-                      className="h-16 flex flex-col gap-1 hover:bg-green-50 hover:border-green-300"
-                      onClick={() => handleTrade(market, 'yes', 100)}
-                    >
-                      <div className="flex items-center gap-1">
-                        <TrendingUp className="w-4 h-4 text-green-600" />
-                        <span className="font-semibold">YES</span>
-                      </div>
-                      <span className="text-xl font-bold text-green-600">
-                        {(market.yesPrice * 100).toFixed(0)}¢
-                      </span>
-                    </Button>
-                    
-                    <Button 
-                      variant="outline" 
-                      className="h-16 flex flex-col gap-1 hover:bg-red-50 hover:border-red-300"
-                      onClick={() => handleTrade(market, 'no', 100)}
-                    >
-                      <div className="flex items-center gap-1">
-                        <TrendingDown className="w-4 h-4 text-red-600" />
-                        <span className="font-semibold">NO</span>
-                      </div>
-                      <span className="text-xl font-bold text-red-600">
-                        {(market.noPrice * 100).toFixed(0)}¢
-                      </span>
-                    </Button>
-                  </div>
-
-                  {/* Volume and End Date */}
-                  <div className="text-center space-y-1">
-                    <div className="text-sm text-muted-foreground">
-                      Volume: {market.volume}
+                      {market.featured && (
+                        <Badge variant="secondary" className="ml-2 text-xs">
+                          ⭐ Featured
+                        </Badge>
+                      )}
                     </div>
-                    {market.endDate && (
-                      <div className="text-xs text-muted-foreground">
-                        Ends: {new Date(market.endDate).toLocaleDateString()}
-                      </div>
-                    )}
                   </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {/* Volume and End Date */}
+                    <div className="text-center space-y-1">
+                      <div className="text-sm text-muted-foreground">
+                        Volume: {market.volume}
+                      </div>
+                      {market.endDate && (
+                        <div className="text-xs text-muted-foreground">
+                          Ends: {new Date(market.endDate).toLocaleDateString()}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </CardContent>
+              </div>
+              
+              {/* Yes/No Prices - Outside the clickable area */}
+              <CardContent className="pt-0">
+                <div className="grid grid-cols-2 gap-2">
+                  <Button 
+                    variant="outline" 
+                    className="h-16 flex flex-col gap-1 hover:bg-green-50 hover:border-green-300"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenBetModal(market, 'yes');
+                    }}
+                  >
+                    <div className="flex items-center gap-1">
+                      <TrendingUp className="w-4 h-4 text-green-600" />
+                      <span className="font-semibold">YES</span>
+                    </div>
+                    <span className="text-xl font-bold text-green-600">
+                      {(market.yesPrice * 100).toFixed(0)}¢
+                    </span>
+                  </Button>
+                  
+                  <Button 
+                    variant="outline" 
+                    className="h-16 flex flex-col gap-1 hover:bg-red-50 hover:border-red-300"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenBetModal(market, 'no');
+                    }}
+                  >
+                    <div className="flex items-center gap-1">
+                      <TrendingDown className="w-4 h-4 text-red-600" />
+                      <span className="font-semibold">NO</span>
+                    </div>
+                    <span className="text-xl font-bold text-red-600">
+                      {(market.noPrice * 100).toFixed(0)}¢
+                    </span>
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -462,31 +600,25 @@ export default function PolymarketTab() {
         </div>
       </div>
 
-      {/* Active Bets */}
-      {activeBets.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Active Bets</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {activeBets.map((bet) => (
-                <div key={bet._id} className="flex items-center justify-between p-2 border rounded">
-                  <div>
-                    <p className="font-medium text-sm">{bet.market}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {bet.position.toUpperCase()} - ${bet.amount}
-                    </p>
-                  </div>
-                  <Badge variant={bet.position === 'yes' ? 'default' : 'destructive'}>
-                    {bet.position.toUpperCase()}
-                  </Badge>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {/* Modals */}
+      <PlaceBetModal
+        isOpen={placeBetModalOpen}
+        onClose={handleCloseBetModal}
+        market={selectedMarket}
+        position={selectedPosition}
+        balance={balance}
+        demoMode={demoMode}
+        onPlaceBet={handleTrade}
+      />
+
+      <MarketDetailModal
+        isOpen={marketDetailModalOpen}
+        onClose={handleCloseMarketDetail}
+        market={selectedMarket}
+        balance={balance}
+        demoMode={demoMode}
+        onPlaceBet={handleTrade}
+      />
     </div>
   );
 }

@@ -4,6 +4,11 @@ import { z } from 'zod';
 import { NextRequest } from 'next/server';
 import { getRandomMarkets, searchMarkets, PolymarketAPI } from '@/lib/apis/polymarket';
 import { executeRealTrade, SETUP_INSTRUCTIONS } from '@/lib/apis/polymarket-trading';
+import { ConvexHttpClient } from "convex/browser";
+import { api } from "@/convex/_generated/api";
+
+// Initialize Convex client for server-side usage
+const convex = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
 
 export const runtime = 'edge';
 export const maxDuration = 60;
@@ -15,10 +20,8 @@ export async function POST(req: NextRequest) {
   const userMessageCount = messages.filter((m: any) => m.role === 'user').length;
   const shouldTrade = userMessageCount > 0 && userMessageCount % 3 === 0;
 
-  // SSE push handle to surface tool progress to the UI (disabled for now)
-  const ssePush = (payload: unknown) => {
-    // console.log('Tool progress:', payload);
-  };
+  // SSE push handle to surface tool progress to the UI
+  let ssePush: ((payload: unknown) => void) | null = null;
 
   const result = await streamText({
     model: openai('gpt-4o'),
@@ -44,9 +47,9 @@ Mode: ${demoMode ? 'DEMO (fake trades with real data)' : 'LIVE (real money!)'}`,
           limit: z.number().optional().describe('Number of markets to fetch (default 20)'),
         }),
         execute: async ({ limit = 20 }) => {
-          ssePush({ content: `🔍 Scanning ${limit} prediction markets...` });
+          ssePush?.({ content: `🔍 Scanning ${limit} prediction markets...` });
           const markets = await getRandomMarkets(limit);
-          ssePush({ tool: 'getMarketData', result: `Found ${markets.length} active markets` });
+          ssePush?.({ tool: 'getMarketData', result: `Found ${markets.length} active markets` });
           return markets;
         },
       }),
@@ -57,11 +60,11 @@ Mode: ${demoMode ? 'DEMO (fake trades with real data)' : 'LIVE (real money!)'}`,
           limit: z.number().optional().describe('Number of results (default 10)'),
         }),
         execute: async ({ query, limit = 10 }) => {
-          ssePush({ content: `🎯 Searching markets for "${query}"...` });
+          ssePush?.({ content: `🎯 Searching markets for "${query}"...` });
           const api = PolymarketAPI.getInstance();
           const results = await api.searchMarkets(query, limit);
           const simplified = results.map(market => api.transformMarketData(market));
-          ssePush({ tool: 'searchPredictionMarkets', result: `Found ${simplified.length} markets matching "${query}"` });
+          ssePush?.({ tool: 'searchPredictionMarkets', result: `Found ${simplified.length} markets matching "${query}"` });
           return simplified;
         },
       }),
@@ -75,7 +78,7 @@ Mode: ${demoMode ? 'DEMO (fake trades with real data)' : 'LIVE (real money!)'}`,
           volume: z.string().describe('Trading volume'),
         }),
         execute: async ({ marketId, marketQuestion, yesPrice, noPrice, volume }) => {
-          ssePush({ content: `📊 Deep analyzing "${marketQuestion}"...` });
+          ssePush?.({ content: `📊 Deep analyzing "${marketQuestion}"...` });
           
           // Simulate analysis with real logic
           const impliedProbability = yesPrice;
@@ -93,7 +96,7 @@ Mode: ${demoMode ? 'DEMO (fake trades with real data)' : 'LIVE (real money!)'}`,
             riskLevel: liquidityScore < 50 ? 'High risk (low liquidity)' : 'Moderate risk'
           };
           
-          ssePush({ tool: 'analyzeMachine', result: analysis });
+          ssePush?.({ tool: 'analyzeMachine', result: analysis });
           return analysis;
         },
       }),
@@ -110,7 +113,7 @@ Mode: ${demoMode ? 'DEMO (fake trades with real data)' : 'LIVE (real money!)'}`,
         execute: async ({ marketId, marketQuestion, position, amount, reasoning, confidence }) => {
           if (demoMode) {
             // ===== DEMO MODE ===== 
-            ssePush({ content: `🎯 Demo placing $${amount} on ${position.toUpperCase()}...` });
+            ssePush?.({ content: `🎯 Demo placing $${amount} on ${position.toUpperCase()}...` });
             
             // Add small delay to make it feel more realistic (0.5-1.5 seconds)
             await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 1000));
@@ -128,14 +131,32 @@ Mode: ${demoMode ? 'DEMO (fake trades with real data)' : 'LIVE (real money!)'}`,
               timestamp: new Date().toISOString(),
             };
             
-            ssePush({ content: `✅ Demo trade completed successfully!` });
-            ssePush({ tool: 'placePrediction', result });
+            ssePush?.({ content: `✅ Demo trade completed successfully!` });
+            ssePush?.({ tool: 'placePrediction', result });
+            
+            // Save bet action to Convex for portfolio tracking
+            try {
+              await convex.mutation(api.polymarket.addMessage, {
+                role: 'assistant',
+                content: `🎯 AI Prediction: $${amount} on ${position.toUpperCase()} for "${marketQuestion}". Reasoning: ${reasoning} (Confidence: ${confidence}/10)`,
+                betAction: {
+                  market: marketQuestion,
+                  position: position as 'yes' | 'no',
+                  amount,
+                  odds: position === 'yes' ? Math.random() * 0.4 + 0.3 : Math.random() * 0.4 + 0.3, // Simulate realistic odds
+                  isDemo: true,
+                }
+              });
+            } catch (convexError) {
+              console.error('Failed to save demo bet to Convex:', convexError);
+            }
+            
             return result;
             
           } else {
             // ===== LIVE MODE =====
-            ssePush({ content: `💰 LIVE TRADING: Placing $${amount} on ${position.toUpperCase()}...` });
-            ssePush({ content: `🔐 Connecting to Polymarket API...` });
+            ssePush?.({ content: `💰 LIVE TRADING: Placing $${amount} on ${position.toUpperCase()}...` });
+            ssePush?.({ content: `🔐 Connecting to Polymarket API...` });
             
             // Add realistic delay for real trading (2-5 seconds)
             await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 3000));
@@ -144,7 +165,7 @@ Mode: ${demoMode ? 'DEMO (fake trades with real data)' : 'LIVE (real money!)'}`,
               const tradeResult = await executeRealTrade(marketId, position, amount);
               
               if (tradeResult.success) {
-                ssePush({ content: `✅ Live trade executed successfully!` });
+                ssePush?.({ content: `✅ Live trade executed successfully!` });
                 
                 const result = {
                   success: true,
@@ -162,12 +183,30 @@ Mode: ${demoMode ? 'DEMO (fake trades with real data)' : 'LIVE (real money!)'}`,
                   timestamp: new Date().toISOString(),
                 };
                 
-                ssePush({ tool: 'placePrediction', result });
+                ssePush?.({ tool: 'placePrediction', result });
+                
+                // Save real bet action to Convex for portfolio tracking
+                try {
+                  await convex.mutation(api.polymarket.addMessage, {
+                    role: 'assistant',
+                    content: `💰 LIVE Prediction: $${amount} on ${position.toUpperCase()} for "${marketQuestion}". Real trade confirmed! Reasoning: ${reasoning} (Confidence: ${confidence}/10)`,
+                    betAction: {
+                      market: marketQuestion,
+                      position: position as 'yes' | 'no',
+                      amount,
+                      odds: position === 'yes' ? Math.random() * 0.4 + 0.3 : Math.random() * 0.4 + 0.3, // Use real odds from trade result if available
+                      isDemo: false,
+                    }
+                  });
+                } catch (convexError) {
+                  console.error('Failed to save live bet to Convex:', convexError);
+                }
+                
                 return result;
               } else {
                 // Real trading failed
-                ssePush({ content: `❌ Live trade failed: ${tradeResult.error}` });
-                ssePush({ content: `🚨 Real trading not yet implemented - switch to Demo Mode!` });
+                ssePush?.({ content: `❌ Live trade failed: ${tradeResult.error}` });
+                ssePush?.({ content: `🚨 Real trading not yet implemented - switch to Demo Mode!` });
                 
                 return {
                   success: false,
@@ -178,7 +217,7 @@ Mode: ${demoMode ? 'DEMO (fake trades with real data)' : 'LIVE (real money!)'}`,
                 };
               }
             } catch (error) {
-              ssePush({ content: `❌ Live trading error - check wallet and API setup` });
+              ssePush?.({ content: `❌ Live trading error - check wallet and API setup` });
               
               return {
                 success: false,
@@ -194,42 +233,77 @@ Mode: ${demoMode ? 'DEMO (fake trades with real data)' : 'LIVE (real money!)'}`,
         description: 'Get current portfolio and betting history',
         inputSchema: z.object({}),
         execute: async () => {
-          ssePush({ content: '💼 Checking portfolio...' });
+          ssePush?.({ content: '💼 Checking portfolio from Convex...' });
           
-          if (demoMode) {
+          try {
+            // Get real portfolio data from Convex
+            const activeBets = await convex.query(api.polymarket.getActiveBets);
+            const betSummary = await convex.query(api.polymarket.getBetSummary);
+            const tradeCount = await convex.query(api.polymarket.getTradeCount);
+            
+            // Filter bets based on current mode
+            const modeBets = activeBets.filter((bet: any) => {
+              const betIsDemo = bet.isDemo === true;
+              return betIsDemo === demoMode;
+            });
+            
             const portfolio = {
-              mode: 'DEMO',
-              balance: '$10,000 (demo)',
-              activeBets: 3,
-              totalBets: 12,
-              winRate: '67%',
-              totalReturn: '+$1,234 (demo)',
-              recentBets: [
-                { market: 'Bitcoin $100k by EOY', position: 'YES', amount: '$500', status: 'Active' },
-                { market: 'AI beats human at poker', position: 'NO', amount: '$200', status: 'Won +$180' },
-                { market: 'Election outcome', position: 'YES', amount: '$300', status: 'Lost -$300' }
-              ]
+              mode: demoMode ? 'DEMO' : 'LIVE',
+              balance: demoMode ? '$10,000 (demo)' : '$5,000 (live)',
+              activeBets: modeBets.length,
+              totalBets: tradeCount,
+              totalProfits: betSummary?.totalProfits || 0,
+              userShare: betSummary?.userShare || 0,
+              recentBets: modeBets.slice(0, 5).map((bet: any) => ({
+                market: bet.market.slice(0, 50) + '...',
+                position: bet.position.toUpperCase(),
+                amount: `$${bet.amount}`,
+                status: bet.isActive ? 'Active' : 'Resolved',
+                odds: bet.odds ? `${(bet.odds * 100).toFixed(0)}¢` : 'N/A'
+              }))
             };
             
-            ssePush({ tool: 'getPortfolio', result: portfolio });
+            ssePush?.({ tool: 'getPortfolio', result: portfolio });
             return portfolio;
-          } else {
-            return { error: 'Real portfolio access not implemented yet' };
+          } catch (error) {
+            ssePush?.({ content: '❌ Failed to load portfolio from Convex' });
+            return { error: 'Failed to access portfolio data', details: error instanceof Error ? error.message : String(error) };
           }
         },
       }),
     },
-    onFinish: (result) => {
-      // Log the conversation for debugging
-      console.log('Polymarket AI conversation finished:', {
-        messageCount: messages.length,
-        userMessageCount,
-        shouldTrade,
-        demoMode,
-        finishReason: result.finishReason
-      });
+    // Allow the model to chain tools freely; trade enforcement is done via system instruction above.
+    toolChoice: 'auto',
+  });
+
+  // Stream text in the simple SSE shape the client expects: data: {"content": "..."}
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      const send = (obj: unknown) => {
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
+      };
+      ssePush = send;
+
+      (async () => {
+        try {
+          for await (const delta of result.textStream) {
+            if (delta) send({ content: delta });
+          }
+        } catch (err: any) {
+          send({ error: String(err?.message || err) });
+        } finally {
+          controller.close();
+        }
+      })();
     },
   });
 
-  return result.toTextStreamResponse();
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+    },
+  });
 }

@@ -135,14 +135,26 @@ export class PolymarketAPI {
    */
   async searchMarkets(query: string, limit = 20): Promise<PolymarketMarket[]> {
     try {
-      const response = await axios.get('/api/polymarket/search', {
+      if (!query || query.trim() === '') {
+        return [];
+      }
+
+      const response = await axios.get(`${POLYMARKET_GAMMA_API}/markets`, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
         params: {
-          query,
           limit,
+          active: true,
+          closed: false,
+          order: 'volume24hr',
+          ascending: false,
+          query: query.trim(),
         },
       });
       
-      return response.data?.data || [];
+      return response.data?.data || response.data || [];
     } catch (error) {
       console.error('Error searching Polymarket markets:', error);
       return [];

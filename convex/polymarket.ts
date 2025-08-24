@@ -3,11 +3,31 @@ import { mutation, query } from "./_generated/server";
 
 const DEFAULT_USER_ID = "user"; // Same as userSettings
 
-// Get all polymarket messages
+// Get all polymarket messages (newest at bottom for proper chat order)
 export const getMessages = query({
   args: {},
   handler: async (ctx) => {
-    return await ctx.db.query("polymarketMessages").order("desc").take(50);
+    return await ctx.db.query("polymarketMessages").order("asc").take(50);
+  },
+});
+
+// Clear all messages and bets (for fresh start)
+export const clearAllMessages = mutation({
+  args: {},
+  handler: async (ctx) => {
+    // Delete all messages
+    const messages = await ctx.db.query("polymarketMessages").collect();
+    for (const message of messages) {
+      await ctx.db.delete(message._id);
+    }
+    
+    // Delete all bets
+    const bets = await ctx.db.query("polymarketBets").collect();
+    for (const bet of bets) {
+      await ctx.db.delete(bet._id);
+    }
+    
+    return { cleared: messages.length + bets.length };
   },
 });
 
@@ -39,8 +59,8 @@ export const addMessage = mutation({
         odds: args.betAction.odds,
         timestamp: Date.now(),
         isActive: true,
-        isDemo: args.betAction.isDemo ?? true, // Default to demo if not specified
-        status: args.betAction.isDemo ? "demo" : "pending", // Set appropriate status
+        isDemo: args.betAction.isDemo === true, // Explicitly check for true
+        status: args.betAction.isDemo === true ? "demo" : "pending", // Set appropriate status
       });
     }
 
@@ -144,7 +164,7 @@ export const resolveBet = mutation({
     }
 
     const profit = finalAmount - bet.amount;
-    const isDemo = bet.isDemo ?? true;
+    const isDemo = bet.isDemo === true;
 
     // Update the bet with outcome
     await ctx.db.patch(args.betId, {
@@ -179,8 +199,8 @@ export const simulateBetResolution = mutation({
       throw new Error("Bet not found");
     }
 
-    // Only allow simulation for demo bets
-    if (!bet.isDemo) {
+    // Only allow simulation for demo bets (must be explicitly marked as demo)
+    if (bet.isDemo !== true) {
       throw new Error("Cannot simulate resolution for real bets");
     }
 
@@ -234,8 +254,8 @@ export const getBetSummary = query({
     const bets = await ctx.db.query("polymarketBets").collect();
     const activeBets = bets.filter(bet => bet.isActive);
     const resolvedBets = bets.filter(bet => !bet.isActive);
-    const demoBets = bets.filter(bet => bet.isDemo);
-    const realBets = bets.filter(bet => !bet.isDemo);
+    const demoBets = bets.filter(bet => bet.isDemo === true);
+    const realBets = bets.filter(bet => bet.isDemo !== true);
     
     // Get user credits for polymarket profits
     const credits = await ctx.db

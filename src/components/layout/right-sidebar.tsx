@@ -1,6 +1,9 @@
 'use client';
 
 import { Badge } from '@/components/ui/badge';
+import { Card, CardContent } from '@/components/ui/card';
+import { useQuery } from 'convex/react';
+import { api } from '../../../convex/_generated/api';
 import TradingAgent from '../agents/trading-agent';
 import PokerAgent from '../agents/poker-agent';
 import PolymarketAgent from '../agents/polymarket-agent';
@@ -46,6 +49,8 @@ export default function RightSidebar({ activeTab }: RightSidebarProps) {
         </div>
         <p className="text-xs text-muted-foreground">{config.description}</p>
       </div>
+      
+
       
       <div className="flex-1 min-h-0 overflow-auto">
         {activeTab === 'trading' && <TradingAgent />}
